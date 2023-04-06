@@ -5,34 +5,23 @@ using BepInEx;
 using RWCustom;
 using MoreSlugcats;
 using UnityEngine;
+using Mono.Cecil.Cil;
+using MonoMod.Cil;
 
 [module: UnverifiableCode]
 [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
 
 namespace ShinyShieldMask
 {
-    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.0.0")]
+    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.1.0")]
     public class ShinyShieldMaskMod : BaseUnityPlugin
     {
+
+
         private void OnEnable()
         {
             On.RainWorld.OnModsInit += RainWorldOnOnModsInit;
         }
-
-        public ShinyShieldMaskMod()
-        {
-            try
-            {
-                options = new ShinyShieldMaskOptions(this, Logger);
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex);
-                throw;
-            }
-
-        }
-        private ShinyShieldMaskOptions options;
 
         private bool IsInit;
 
@@ -46,9 +35,9 @@ namespace ShinyShieldMask
                 //Your hooks go here
                 Debug.Log("Init ShinyShieldMask");
                 On.Spear.HitSomething += this.Spear_HitSomething;
-                MachineConnector.SetRegisteredOI("ShinyKelp.ShinyShieldMask", this.options);
+                IL.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship;
+                MachineConnector.SetRegisteredOI("ShinyKelp.ShinyShieldMask", ShinyShieldMaskOptions.instance);
                 Debug.Log("Finished applying hooks!");
-
                 IsInit = true;
             }
             catch (Exception ex)
@@ -58,10 +47,84 @@ namespace ShinyShieldMask
             }
         }
 
+        private void LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship(ILContext il)
+        {
+            ILCursor c = new ILCursor(il);
+
+            c.GotoNext(MoveType.After,
+                x => x.MatchLdcI4(700)
+            );
+
+            c.Emit(OpCodes.Pop);
+
+            c.EmitDelegate<Func<int>>(() =>
+            {
+                return ShinyShieldMaskOptions.vultureMaskFearDuration.Value * 40;
+            });
+                
+            
+            c.GotoNext(MoveType.After,
+                x => x.MatchLdcI4(1200)
+            );
+
+            c.Emit(OpCodes.Pop);
+            
+            c.EmitDelegate<Func<int>>(() => {
+                return ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value * 40;
+            }
+            );
+
+            //First two values were for the duration. Next two are for the intensity of the fear throughout the duration,
+            //defining start and end of the inverselerp function.
+            c.GotoNext(MoveType.After,
+                x => x.MatchLdcI4(700)
+            );
+
+            c.Emit(OpCodes.Pop);
+
+            //c.Emit(OpCodes.Ldc_I4, options.vultureMaskFearDuration.Value * 40);
+            c.EmitDelegate<Func<int>>(() =>
+            {
+                return ShinyShieldMaskOptions.vultureMaskFearDuration.Value * 40;
+            });
+
+
+            c.GotoNext(MoveType.After,
+                x => x.MatchLdcI4(1200)
+            );
+
+            c.Emit(OpCodes.Pop);
+
+            c.EmitDelegate<Func<int>>(() => {
+                return ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value * 40;
+            }
+            );
+
+
+            //Value to calculate in the inverselerp function.
+            c.GotoNext(MoveType.After,
+                x => x.MatchConvR4(),
+                x => x.MatchLdcR4(600f)
+                );
+            c.Emit(OpCodes.Pop);
+
+            
+            c.Emit(OpCodes.Ldarg_1);
+            c.EmitDelegate<Func<RelationshipTracker.DynamicRelationship, float>> ((dRelation) =>
+            {  
+                if ((dRelation.state as LizardAI.LizardTrackState).vultureMask == 1)
+                {
+                    return (ShinyShieldMaskOptions.vultureMaskFearDuration.Value * 40) * 0.7f;
+                }
+                else
+                    return(ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value * 40) * 0.7f;
+            }
+            );
+        }
 
         private bool Spear_HitSomething(On.Spear.orig_HitSomething orig, Spear self, SharedPhysics.CollisionResult result, bool eu)
         {
-            if (options.enableShieldMask.Value && result.obj is Player player && !(player is null))
+            if (ShinyShieldMaskOptions.enableShieldMask.Value && result.obj is Player player && !(player is null))
             {
                 if (result.chunk != player.firstChunk)
                     return orig(self, result, eu);
@@ -77,9 +140,9 @@ namespace ShinyShieldMask
                     player.firstChunk.vel += knockback;
 
                     player.Stun((int)(10f * stunBonus));
-                    if(stunBonus > 0f && stunBonus < 1.8f)
+                    if(stunBonus > 0f && stunBonus < 1.6f)
                         player.ReleaseGrasp(graspIndex);
-                    else if(stunBonus >= 1.8f)
+                    else if(stunBonus >= 1.6f)
                         player.LoseAllGrasps();
                     self.room.PlaySound(SoundID.Spear_Bounce_Off_Creauture_Shell, self.firstChunk);
                     HitEffect(self.firstChunk.vel, result.collisionPoint, self.room);
@@ -96,14 +159,15 @@ namespace ShinyShieldMask
             {
                 if (result.chunk == scavenger.bodyChunks[2] && !scavenger.State.dead)
                 {
-                    bool frontalHit = Vector2.Dot(self.firstChunk.vel.normalized, scavenger.HeadLookDir) >= 0f - options.eliteResistance.Value;
+                    bool frontalHit = Vector2.Dot(self.firstChunk.vel.normalized, scavenger.HeadLookDir) >= -(scavenger.King? ShinyShieldMaskOptions.eliteResistance.Value*1.5f : ShinyShieldMaskOptions.eliteResistance.Value) ;
 
                     if (frontalHit)
                     {
                         Vector2 b = self.firstChunk.vel * self.firstChunk.mass / scavenger.bodyChunks[2].mass;
                         scavenger.bodyChunks[2].vel += b;
 
-                        scavenger.Violence(self.firstChunk, self.firstChunk.vel, scavenger.bodyChunks[2], result.onAppendagePos, Creature.DamageType.Blunt, 0.02f, 5f);
+                        if(!scavenger.King) 
+                            scavenger.Violence(self.firstChunk, self.firstChunk.vel, scavenger.bodyChunks[2], result.onAppendagePos, Creature.DamageType.Blunt, 0.02f, 5f);
                         self.room.PlaySound(SoundID.Spear_Bounce_Off_Creauture_Shell, self.firstChunk);
                         HitEffect(self.firstChunk.vel, result.collisionPoint, self.room);
                         self.vibrate = 20;
@@ -126,7 +190,7 @@ namespace ShinyShieldMask
         {
             
             bool isWearingMask = false;
-            stunBonus = options.vultureMaskStun.Value;
+            stunBonus = ShinyShieldMaskOptions.vultureMaskStun.Value;
             graspIndex = 0;
 
             for (int i = 0; i < player.grasps.Length; i++)
@@ -137,10 +201,10 @@ namespace ShinyShieldMask
                     graspIndex = i;
                     if (vMask.King)
                     {
-                        stunBonus = options.vultureKingMaskStun.Value;
+                        stunBonus = ShinyShieldMaskOptions.vultureKingMaskStun.Value;
                     }
                     else if (vMask.AbstrMsk.scavKing)
-                        stunBonus = options.scavKingMaskStun.Value;
+                        stunBonus = ShinyShieldMaskOptions.scavKingMaskStun.Value;
                     break;
                     
                 }
