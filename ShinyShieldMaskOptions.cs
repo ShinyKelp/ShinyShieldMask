@@ -15,6 +15,7 @@ namespace ShinyShieldMask
         public static readonly Configurable<float> scavKingMaskStun = instance.config.Bind<float>("kingMaskStun", 0f, new ConfigAcceptableRange<float>(0f, 10f));
         public static readonly Configurable<float> eliteResistance = instance.config.Bind<float>("eliteResistance", .3f, new ConfigAcceptableRange<float>(0f, 1f));
         public static readonly Configurable<bool> enableShieldMask = instance.config.Bind<bool>("enableShieldMask", true);
+        public static readonly Configurable<bool> randomFearDuration = instance.config.Bind<bool>("randomFearDuration", false);
         public static readonly Configurable<int> vultureMaskFearDuration = instance.config.Bind<int>("vultureMaskFear", 18, new ConfigAcceptableRange<int>(0, 999));
         public static readonly Configurable<int> kingVultureMaskFearDuration = instance.config.Bind<int>("kingVultureMaskFear", 30, new ConfigAcceptableRange<int>(0, 999));
         private UIelement[] UIArrPlayerOptions;
@@ -44,7 +45,9 @@ namespace ShinyShieldMask
                 new OpUpdown(vultureMaskFearDuration, new Vector2(10f, 200f), 60f),
                 new OpLabel(75f, 205f, "Vulture mask fear duration (seconds)"),
                 new OpUpdown(kingVultureMaskFearDuration, new Vector2(10f, 140f), 60f),
-                new OpLabel(75f, 145f, "Vulture King/Scav king mask fear duration (seconds)")
+                new OpLabel(75f, 145f, "Vulture King/Scav king mask fear duration (seconds)"),
+                new OpCheckBox(randomFearDuration, new Vector2(10f, 80f)),
+                new OpLabel(38f, 85f, "Randomize fear duration (average time will be the same)")
             };
 
             opTab.AddItems(UIArrPlayerOptions);

@@ -17,10 +17,11 @@ namespace ShinyShieldMask
     public class ShinyShieldMaskMod : BaseUnityPlugin
     {
 
-
+        private int count;
         private void OnEnable()
         {
             On.RainWorld.OnModsInit += RainWorldOnOnModsInit;
+            count = 0;
         }
 
         private bool IsInit;
@@ -33,11 +34,11 @@ namespace ShinyShieldMask
                 if (IsInit) return;
 
                 //Your hooks go here
-                Debug.Log("Init ShinyShieldMask");
                 On.Spear.HitSomething += this.Spear_HitSomething;
                 IL.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship;
+                //On.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += UsedToVultureMaskCheck;
                 MachineConnector.SetRegisteredOI("ShinyKelp.ShinyShieldMask", ShinyShieldMaskOptions.instance);
-                Debug.Log("Finished applying hooks!");
+                Debug.Log("Finished applying hooks for Shiny Shield Mask!");
                 IsInit = true;
             }
             catch (Exception ex)
@@ -47,10 +48,26 @@ namespace ShinyShieldMask
             }
         }
 
+        private CreatureTemplate.Relationship UsedToVultureMaskCheck(On.LizardAI.orig_IUseARelationshipTracker_UpdateDynamicRelationship orig, LizardAI self, RelationshipTracker.DynamicRelationship dRelation)
+        {
+            if (self.usedToVultureMask < ShinyShieldMaskOptions.vultureMaskFearDuration.Value * 40)
+            {
+                Debug.Log("CURRENT VULTURE MASK VALUE: " + self.usedToVultureMask);
+                Debug.Log("COUNT: " + count);
+                count++;
+            }
+            else count = 0;
+
+
+            return orig(self, dRelation);
+        }
+
         private void LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship(ILContext il)
         {
+            
             ILCursor c = new ILCursor(il);
 
+            //Change values for mask duration.
             c.GotoNext(MoveType.After,
                 x => x.MatchLdcI4(700)
             );
@@ -61,20 +78,46 @@ namespace ShinyShieldMask
             {
                 return ShinyShieldMaskOptions.vultureMaskFearDuration.Value * 40;
             });
-                
-            
+
+
             c.GotoNext(MoveType.After,
                 x => x.MatchLdcI4(1200)
             );
 
             c.Emit(OpCodes.Pop);
-            
+
             c.EmitDelegate<Func<int>>(() => {
                 return ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value * 40;
             }
             );
 
-            //First two values were for the duration. Next two are for the intensity of the fear throughout the duration,
+            //Mask fear duration randomization (change usedToVultureMask++)
+            c.GotoNext(MoveType.After,
+                x => x.MatchAdd()
+            );
+            c.Emit(OpCodes.Ldarg_1);
+            c.EmitDelegate<Func<RelationshipTracker.DynamicRelationship, int>>((dRelation) => {
+                if (ShinyShieldMaskOptions.randomFearDuration.Value)
+                {
+                    int a;
+                    if ((dRelation.state as LizardAI.LizardTrackState).vultureMask == 1)
+                    {
+                        a = UnityEngine.Random.Range(-ShinyShieldMaskOptions.vultureMaskFearDuration.Value*2, ShinyShieldMaskOptions.vultureMaskFearDuration.Value*2 + 1);
+                        a = (int)(a * 0.75f);
+                    }
+                    else
+                    {
+                        a = UnityEngine.Random.Range(-ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value*2, ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value*2 + 1);
+                        a = (int)(a * 0.75f);
+                    }
+                    return a;
+                }
+                else return 0;
+            }
+            );
+            c.Emit(OpCodes.Add_Ovf);
+
+            //Next two values are for the intensity of the fear throughout the duration,
             //defining start and end of the inverselerp function.
             c.GotoNext(MoveType.After,
                 x => x.MatchLdcI4(700)
@@ -100,27 +143,28 @@ namespace ShinyShieldMask
             }
             );
 
-
             //Value to calculate in the inverselerp function.
+            c = new ILCursor(il);
             c.GotoNext(MoveType.After,
                 x => x.MatchConvR4(),
                 x => x.MatchLdcR4(600f)
                 );
             c.Emit(OpCodes.Pop);
+            Debug.Log("After 600f...");
 
-            
             c.Emit(OpCodes.Ldarg_1);
-            c.EmitDelegate<Func<RelationshipTracker.DynamicRelationship, float>> ((dRelation) =>
-            {  
+            c.EmitDelegate<Func<RelationshipTracker.DynamicRelationship, float>>((dRelation) =>
+            {
                 if ((dRelation.state as LizardAI.LizardTrackState).vultureMask == 1)
                 {
                     return (ShinyShieldMaskOptions.vultureMaskFearDuration.Value * 40) * 0.7f;
                 }
                 else
-                    return(ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value * 40) * 0.7f;
+                    return (ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value * 40) * 0.7f;
             }
             );
         }
+
 
         private bool Spear_HitSomething(On.Spear.orig_HitSomething orig, Spear self, SharedPhysics.CollisionResult result, bool eu)
         {
