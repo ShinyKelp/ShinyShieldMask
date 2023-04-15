@@ -36,7 +36,7 @@ namespace ShinyShieldMask
                 //Your hooks go here
                 On.Spear.HitSomething += this.Spear_HitSomething;
                 IL.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship;
-                //On.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += UsedToVultureMaskCheck;
+                On.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += UsedToVultureMaskCheck;
                 MachineConnector.SetRegisteredOI("ShinyKelp.ShinyShieldMask", ShinyShieldMaskOptions.instance);
                 Debug.Log("Finished applying hooks for Shiny Shield Mask!");
                 IsInit = true;
@@ -91,25 +91,36 @@ namespace ShinyShieldMask
             }
             );
 
-            //Mask fear duration randomization (change usedToVultureMask++)
+            //Mask fear duration randomization.
+            //We do this by setting usedToVultureMask to a random value the first frame that the lizard sees the mask.
             c.GotoNext(MoveType.After,
                 x => x.MatchAdd()
             );
+
             c.Emit(OpCodes.Ldarg_1);
-            c.EmitDelegate<Func<RelationshipTracker.DynamicRelationship, int>>((dRelation) => {
+            c.Emit(OpCodes.Ldarg_0);
+            c.EmitDelegate<Func<RelationshipTracker.DynamicRelationship, LizardAI, int>>((dRelation, thisAI) => {
                 if (ShinyShieldMaskOptions.randomFearDuration.Value)
                 {
+                    if (thisAI.usedToVultureMask == -1)
+                        return 1;
+                    if (thisAI.usedToVultureMask != 0)
+                        return 0;
                     int a;
                     if ((dRelation.state as LizardAI.LizardTrackState).vultureMask == 1)
                     {
-                        a = UnityEngine.Random.Range(-ShinyShieldMaskOptions.vultureMaskFearDuration.Value*2, ShinyShieldMaskOptions.vultureMaskFearDuration.Value*2 + 1);
-                        a = (int)(a * 0.75f);
+                        a = UnityEngine.Random.Range(0, ShinyShieldMaskOptions.vultureMaskFearDuration.Value*20 + 1);
+                        if (UnityEngine.Random.value < .5f)
+                            a = -a;
                     }
                     else
                     {
-                        a = UnityEngine.Random.Range(-ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value*2, ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value*2 + 1);
-                        a = (int)(a * 0.75f);
+                        a = UnityEngine.Random.Range(0, ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value * 20 + 1);
+                        if (UnityEngine.Random.value < .5f)
+                            a = -a;
                     }
+                    if (a == -1)
+                        a = 0;
                     return a;
                 }
                 else return 0;
@@ -125,7 +136,6 @@ namespace ShinyShieldMask
 
             c.Emit(OpCodes.Pop);
 
-            //c.Emit(OpCodes.Ldc_I4, options.vultureMaskFearDuration.Value * 40);
             c.EmitDelegate<Func<int>>(() =>
             {
                 return ShinyShieldMaskOptions.vultureMaskFearDuration.Value * 40;
@@ -150,7 +160,6 @@ namespace ShinyShieldMask
                 x => x.MatchLdcR4(600f)
                 );
             c.Emit(OpCodes.Pop);
-            Debug.Log("After 600f...");
 
             c.Emit(OpCodes.Ldarg_1);
             c.EmitDelegate<Func<RelationshipTracker.DynamicRelationship, float>>((dRelation) =>

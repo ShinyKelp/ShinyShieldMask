@@ -47,7 +47,7 @@ namespace ShinyShieldMask
                 new OpUpdown(kingVultureMaskFearDuration, new Vector2(10f, 140f), 60f),
                 new OpLabel(75f, 145f, "Vulture King/Scav king mask fear duration (seconds)"),
                 new OpCheckBox(randomFearDuration, new Vector2(10f, 80f)),
-                new OpLabel(38f, 85f, "Randomize fear duration (average time will be the same)")
+                new OpLabel(38f, 85f, "Randomize fear duration (up to 50% more or less duration)")
             };
 
             opTab.AddItems(UIArrPlayerOptions);
