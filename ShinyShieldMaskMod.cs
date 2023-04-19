@@ -7,17 +7,20 @@ using MoreSlugcats;
 using UnityEngine;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
+using System.Reflection;
+using LancerRemix.Cat;
 
 [module: UnverifiableCode]
 [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
 
 namespace ShinyShieldMask
 {
-    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.1.0")]
+    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.1.4")]
     public class ShinyShieldMaskMod : BaseUnityPlugin
     {
 
         private int count;
+        private bool hasLancerMod;
         private void OnEnable()
         {
             On.RainWorld.OnModsInit += RainWorldOnOnModsInit;
@@ -32,11 +35,21 @@ namespace ShinyShieldMask
             try
             {
                 if (IsInit) return;
+                hasLancerMod = false;
+                foreach(ModManager.Mod mod in ModManager.ActiveMods)
+                {
+                    if (mod.id == "topicular.lancer")
+                    {
+                        //hasLancerMod = true;
+                        Debug.Log("Lancer mod detected.");
+                        break;
+                    }
+                }
 
                 //Your hooks go here
                 On.Spear.HitSomething += this.Spear_HitSomething;
                 IL.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship;
-                On.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += UsedToVultureMaskCheck;
+                On.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship1;
                 MachineConnector.SetRegisteredOI("ShinyKelp.ShinyShieldMask", ShinyShieldMaskOptions.instance);
                 Debug.Log("Finished applying hooks for Shiny Shield Mask!");
                 IsInit = true;
@@ -48,18 +61,69 @@ namespace ShinyShieldMask
             }
         }
 
-        private CreatureTemplate.Relationship UsedToVultureMaskCheck(On.LizardAI.orig_IUseARelationshipTracker_UpdateDynamicRelationship orig, LizardAI self, RelationshipTracker.DynamicRelationship dRelation)
+
+        private CreatureTemplate.Relationship LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship1(On.LizardAI.orig_IUseARelationshipTracker_UpdateDynamicRelationship orig, LizardAI self, RelationshipTracker.DynamicRelationship dRelation)
         {
-            if (self.usedToVultureMask < ShinyShieldMaskOptions.vultureMaskFearDuration.Value * 40)
+            if ((ShinyShieldMaskOptions.eliteScavFearDuration.Value == 0) ||
+                dRelation is null || dRelation.trackerRep is null || dRelation.trackerRep.representedCreature is null ||
+                dRelation.trackerRep.representedCreature.realizedCreature is null ||
+                dRelation.trackerRep.representedCreature.creatureTemplate.type != MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite)
+                return orig(self, dRelation);
+
+            if (self.usedToVultureMask < ShinyShieldMaskOptions.eliteScavFearDuration.Value*40 &&
+                self.creature.creatureTemplate.type != CreatureTemplate.Type.RedLizard &&
+                self.creature.creatureTemplate.type != CreatureTemplate.Type.BlackLizard &&
+                !dRelation.trackerRep.representedCreature.realizedCreature.dead)
             {
-                Debug.Log("CURRENT VULTURE MASK VALUE: " + self.usedToVultureMask);
-                Debug.Log("COUNT: " + count);
-                count++;
+                if (self.usedToVultureMask == -1)
+                    self.usedToVultureMask = 1;
+                else if (ShinyShieldMaskOptions.randomFearDuration.Value && self.usedToVultureMask == 0)
+                {
+                    int a = UnityEngine.Random.Range(0, ShinyShieldMaskOptions.eliteScavFearDuration.Value * 20 + 1);
+                    if (UnityEngine.Random.value < .5f)
+                        a = -a;
+                    self.usedToVultureMask = a;
+                }
+                else
+                    self.usedToVultureMask++;
+
+                bool itHasPrey = false;
+                foreach (ThreatTracker.ThreatCreature threat in self.threatTracker.threatCreatures)
+                {
+                    if (threat.creature == dRelation.trackerRep)
+                    {
+                        itHasPrey = true;
+                    }
+                }
+                if(!itHasPrey)
+                    self.threatTracker.AddThreatCreature(dRelation.trackerRep);
+
+                dRelation.currentRelationship.type = CreatureTemplate.Relationship.Type.Afraid;
+                dRelation.currentRelationship.intensity = 0.8f;
             }
-            else count = 0;
-
-
-            return orig(self, dRelation);
+            else if (dRelation.currentRelationship.type == CreatureTemplate.Relationship.Type.Afraid &&
+                StaticWorld.creatureTemplates[self.creature.creatureTemplate.index].relationships
+                [MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite.Index].type != CreatureTemplate.Relationship.Type.Afraid)
+            {
+                dRelation.currentRelationship.type = StaticWorld.creatureTemplates[self.creature.creatureTemplate.index].relationships
+                    [MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite.Index].type;
+                dRelation.currentRelationship.intensity = StaticWorld.creatureTemplates[self.creature.creatureTemplate.index].relationships
+                    [MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite.Index].intensity;
+                
+                bool itHasPrey = false;
+                foreach (ThreatTracker.ThreatCreature threat in self.threatTracker.threatCreatures)
+                {
+                    if (threat.creature == dRelation.trackerRep)
+                    {
+                        itHasPrey = true;
+                    }
+                }
+                if (itHasPrey)
+                    self.threatTracker.RemoveThreatCreature(dRelation.trackerRep.representedCreature);
+            }
+            else
+                return orig(self, dRelation);
+            return dRelation.currentRelationship;
         }
 
         private void LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship(ILContext il)
@@ -182,21 +246,41 @@ namespace ShinyShieldMask
                 if (result.chunk != player.firstChunk)
                     return orig(self, result, eu);
 
-                else if (IsWearingMask(player, out float stunBonus, out int graspIndex))
+                else if (IsWearingMask(player, out int graspIndex, out VultureMask mask) || (hasLancerMod && LancerCheck(player, out graspIndex, out mask)))
                 {
-                    VultureMask mask = player.grasps[graspIndex].grabbed as VultureMask;
+
                     Vector2 knockback = self.firstChunk.vel * .12f / player.firstChunk.mass;
+                    float stunBonus = ShinyShieldMaskOptions.vultureMaskStun.Value;
                     if (mask.King)
+                    {
                         knockback *= .75f;
+                        stunBonus = ShinyShieldMaskOptions.vultureKingMaskStun.Value;
+                    }
                     else if (mask.AbstrMsk.scavKing)
+                    {
                         knockback *= .4f;
+                        stunBonus = ShinyShieldMaskOptions.scavKingMaskStun.Value;
+                    }
                     player.firstChunk.vel += knockback;
 
                     player.Stun((int)(10f * stunBonus));
                     if(stunBonus > 0f && stunBonus < 1.6f)
-                        player.ReleaseGrasp(graspIndex);
+                    {
+                        if(graspIndex < player.grasps.Length)
+                            player.ReleaseGrasp(graspIndex);
+                        else if(hasLancerMod && graspIndex == 4)
+                        {
+                            ReleaseLunterMask(player);
+                        }
+                    }
                     else if(stunBonus >= 1.6f)
+                    {
                         player.LoseAllGrasps();
+                        if (hasLancerMod && graspIndex == 4)
+                        {
+                            ReleaseLunterMask(player);
+                        }
+                    }
                     self.room.PlaySound(SoundID.Spear_Bounce_Off_Creauture_Shell, self.firstChunk);
                     HitEffect(self.firstChunk.vel, result.collisionPoint, self.room);
                     self.vibrate = 20;
@@ -239,25 +323,20 @@ namespace ShinyShieldMask
                 return orig(self, result, eu);
         }
 
-        public bool IsWearingMask(Player player, out float stunBonus, out int graspIndex)
+        public bool IsWearingMask(Player player, out int graspIndex, out VultureMask mask)
         {
             
             bool isWearingMask = false;
-            stunBonus = ShinyShieldMaskOptions.vultureMaskStun.Value;
             graspIndex = 0;
-
+            mask = null;
             for (int i = 0; i < player.grasps.Length; i++)
             {
-                if (!(player.grasps[i] is null) && player.grasps[i].grabbed is VultureMask vMask && vMask.donned > .75f)
+                if (!(player.grasps[i] is null) && player.grasps[i].grabbed is VultureMask vMask && 
+                    (vMask.donned > .75f || hasLancerMod))
                 {
                     isWearingMask = true;
+                    mask = vMask;
                     graspIndex = i;
-                    if (vMask.King)
-                    {
-                        stunBonus = ShinyShieldMaskOptions.vultureKingMaskStun.Value;
-                    }
-                    else if (vMask.AbstrMsk.scavKing)
-                        stunBonus = ShinyShieldMaskOptions.scavKingMaskStun.Value;
                     break;
                     
                 }
@@ -279,7 +358,39 @@ namespace ShinyShieldMask
             room.AddObject(new StationaryEffect(basePos, new Color(1f, 1f, 1f), null, StationaryEffect.EffectType.FlashingOrb));
         }
 
+        private bool LancerCheck(Player player, out int graspIndex, out VultureMask mask)
+        {
+            graspIndex = 0;
+            mask = null;
+            var sub = ModifyCat.GetSub<CatSub.Cat.CatSupplement>(player);
+            BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+            if (sub.GetType().Name != "LunterSupplement") 
+                return false;
+            var maskOnHorn = sub.GetType().GetField("maskOnHorn", flags).GetValue(sub);
+            bool HasAMask = (bool)maskOnHorn.GetType().GetProperty("HasAMask", flags).GetGetMethod().Invoke(maskOnHorn, null);
+            if (HasAMask)
+            {
+                graspIndex = 4;
+                mask = (VultureMask)maskOnHorn.GetType().GetProperty("Mask", flags).GetGetMethod().Invoke(maskOnHorn, null);
+            }
+            return HasAMask;
+        }
 
+        private void ReleaseLunterMask(Player player)
+        {
+            Debug.Log("Called Release Lunter Mask");
+            var sub = ModifyCat.GetSub<CatSub.Cat.CatSupplement>(player);
+            BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+            if (sub.GetType().Name != "LunterSupplement")
+            {
+                Debug.Log("LunterSupplement not found.");
+                return;
+            }
+            Debug.Log("LunterSupplement found.");
+            var maskOnHorn = sub.GetType().GetField("maskOnHorn", flags).GetValue(sub);
+            Debug.Log("Attempting to call DropMask.");
+            maskOnHorn.GetType().GetMethod("DropMask", flags).Invoke(maskOnHorn, new System.Object[] { true });
+        }
 
     }
 }
