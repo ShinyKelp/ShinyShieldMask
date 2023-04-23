@@ -82,7 +82,8 @@ namespace ShinyShieldMask
             On.Player.Stun += faceMaskHooks.DropMaskOnStun;
             On.Player.Destroy += faceMaskHooks.Player_Destroy;
             On.Creature.Violence += faceMaskHooks.DropFaceMaskOnViolence;
-            On.ScavengerAI.PickUpItemScore += faceMaskHooks.ScavNoPickUpFaceMask;
+            On.ScavengerAI.WeaponScore += faceMaskHooks.ScavNoPickUpFaceMaskWeapon;
+            On.ScavengerAI.CollectScore_PhysicalObject_bool += faceMaskHooks.ScavNoPickUpFaceMaskCollect;
             On.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += faceMaskHooks.LizardSeeFaceMask;
             On.Player.Grabbed += faceMaskHooks.Grabbed;
             On.Player.GrabUpdate += faceMaskHooks.Player_GrabUpdate;

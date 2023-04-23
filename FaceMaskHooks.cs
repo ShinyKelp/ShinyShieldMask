@@ -275,17 +275,29 @@ namespace ShinyShieldMask
                 orig(self, sLeaser, rCam, timeStacker, camPos);
         }
 
-        public float ScavNoPickUpFaceMask(On.ScavengerAI.orig_PickUpItemScore orig, ScavengerAI self, ItemTracker.ItemRepresentation rep)
+        public int ScavNoPickUpFaceMaskWeapon(On.ScavengerAI.orig_WeaponScore orig, ScavengerAI self, PhysicalObject obj, bool pickupDropInsteadOfWeaponSelection)
         {
-            if(ModManager.MMF && MMF.cfgHunterBackspearProtect.Value && rep.representedItem.realizedObject is VultureMask mask)
+            if(ModManager.MMF && obj is VultureMask mask)
             {
                 foreach (var pair in playerFaceMasks)
                 {
                     if (pair.Value.HasAMask && pair.Value.Mask == mask)
-                        return 0f;
+                        return 0;
                 }
             }
-            return orig(self, rep);
+            return orig(self, obj, pickupDropInsteadOfWeaponSelection);
+        }
+        public int ScavNoPickUpFaceMaskCollect(On.ScavengerAI.orig_CollectScore_PhysicalObject_bool orig, ScavengerAI self, PhysicalObject obj, bool weaponFiltered)
+        {
+            if (ModManager.MMF && obj is VultureMask mask)
+            {
+                foreach (var pair in playerFaceMasks)
+                {
+                    if (pair.Value.HasAMask && pair.Value.Mask == mask)
+                        return 0;
+                }
+            }
+            return orig(self, obj, weaponFiltered);
         }
 
 
