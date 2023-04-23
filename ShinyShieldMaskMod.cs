@@ -9,18 +9,20 @@ using Mono.Cecil.Cil;
 using MonoMod.Cil;
 using System.Reflection;
 using LancerRemix.Cat;
+using System.Collections.Generic;
 
 [module: UnverifiableCode]
 [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
 
 namespace ShinyShieldMask
 {
-    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.1.4")]
+    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.2.0")]
     public class ShinyShieldMaskMod : BaseUnityPlugin
     {
 
         private int count;
-        private bool hasLancerMod;
+        private bool hasLancerMod, hasDropButton;
+        private FaceMaskHooks faceMaskHooks;
         private void OnEnable()
         {
             On.RainWorld.OnModsInit += RainWorldOnOnModsInit;
@@ -40,16 +42,26 @@ namespace ShinyShieldMask
                 {
                     if (mod.id == "topicular.lancer")
                     {
-                        //hasLancerMod = true;
+                        hasLancerMod = true;
                         Debug.Log("Lancer mod detected.");
-                        break;
+                    }
+                    if(mod.id == "drop-button")
+                    {
+                        hasDropButton = true;
+                        Debug.Log("Drop button detected.");
                     }
                 }
-
+                
                 //Your hooks go here
                 On.Spear.HitSomething += this.Spear_HitSomething;
                 IL.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship;
                 On.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship1;
+                On.RainWorldGame.ShutDownProcess += RainWorldGameOnShutDownProcess;
+                On.GameSession.ctor += GameSessionOnctor;
+                if (faceMaskHooks is null)
+                    faceMaskHooks = new FaceMaskHooks();
+                else faceMaskHooks.ClearMasks();
+                SetFaceMaskHooks();
                 MachineConnector.SetRegisteredOI("ShinyKelp.ShinyShieldMask", ShinyShieldMaskOptions.instance);
                 Debug.Log("Finished applying hooks for Shiny Shield Mask!");
                 IsInit = true;
@@ -61,6 +73,40 @@ namespace ShinyShieldMask
             }
         }
 
+
+        public void SetFaceMaskHooks()
+        {
+            On.Player.Update += faceMaskHooks.FaceMaskUpdate;
+            On.Player.ObjectEaten += faceMaskHooks.ObjectEatenWithFaceMask;
+            On.Player.Die += faceMaskHooks.DropFaceMaskOnDeath;
+            On.Player.Stun += faceMaskHooks.DropMaskOnStun;
+            On.Player.Destroy += faceMaskHooks.Player_Destroy;
+            On.Creature.Violence += faceMaskHooks.DropFaceMaskOnViolence;
+            On.ScavengerAI.PickUpItemScore += faceMaskHooks.ScavNoPickUpFaceMask;
+            On.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += faceMaskHooks.LizardSeeFaceMask;
+            On.Player.Grabbed += faceMaskHooks.Grabbed;
+            On.Player.GrabUpdate += faceMaskHooks.Player_GrabUpdate;
+            IL.Player.GrabUpdate += faceMaskHooks.Player_GrabUpdate;
+            On.Player.ctor += faceMaskHooks.Player_ctor;
+
+            On.VultureMask.DrawSprites += faceMaskHooks.FaceMaskDrawSprites;
+            On.VultureMask.Update += faceMaskHooks.VultureMask_Update_Patch;
+
+            faceMaskHooks.SetVariables(hasLancerMod, hasDropButton);
+        }
+
+
+        private void RainWorldGameOnShutDownProcess(On.RainWorldGame.orig_ShutDownProcess orig, RainWorldGame self)
+        {
+            faceMaskHooks.ClearMasks();
+            orig(self);
+        }
+
+        private void GameSessionOnctor(On.GameSession.orig_ctor orig, GameSession self, RainWorldGame game)
+        {
+            faceMaskHooks.ClearMasks();
+            orig(self, game);
+        }
 
         private CreatureTemplate.Relationship LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship1(On.LizardAI.orig_IUseARelationshipTracker_UpdateDynamicRelationship orig, LizardAI self, RelationshipTracker.DynamicRelationship dRelation)
         {
@@ -238,7 +284,6 @@ namespace ShinyShieldMask
             );
         }
 
-
         private bool Spear_HitSomething(On.Spear.orig_HitSomething orig, Spear self, SharedPhysics.CollisionResult result, bool eu)
         {
             if (ShinyShieldMaskOptions.enableShieldMask.Value && result.obj is Player player && !(player is null))
@@ -246,47 +291,73 @@ namespace ShinyShieldMask
                 if (result.chunk != player.firstChunk)
                     return orig(self, result, eu);
 
-                else if (IsWearingMask(player, out int graspIndex, out VultureMask mask) || (hasLancerMod && LancerCheck(player, out graspIndex, out mask)))
+                bool hasLunterMask = false, hasFaceMask = false;
+
+                if (IsWearingMask(player, out int graspIndex, out VultureMask mask) || 
+                    (ShinyShieldMaskOptions.wearableMask.Value && (hasFaceMask = faceMaskHooks.IsPlayerWearingMask(player, out mask))) ||
+                    (hasLancerMod && (hasLunterMask = LunterMaskCheck(player, out mask))) )
                 {
 
                     Vector2 knockback = self.firstChunk.vel * .12f / player.firstChunk.mass;
+                    Vector2 maskKnockback = Custom.RNV();
+                    if (maskKnockback.y < 0f)
+                        maskKnockback.y = -maskKnockback.y;
+                    maskKnockback *= (9f * UnityEngine.Random.value + 6f);
                     float stunBonus = ShinyShieldMaskOptions.vultureMaskStun.Value;
-                    if (mask.King)
+                    
+                    if(mask.maskGfx.overrideSprite != "" && (mask.maskGfx.overrideSprite == "KrakenMask" ||
+                        mask.maskGfx.overrideSprite == "SpikeMask" || mask.maskGfx.overrideSprite == "HornedMask" ||
+                        mask.maskGfx.overrideSprite == "SadMask"))
                     {
                         knockback *= .75f;
-                        stunBonus = ShinyShieldMaskOptions.vultureKingMaskStun.Value;
+                        maskKnockback *= .65f;
+                        stunBonus = ShinyShieldMaskOptions.eliteScavMaskStun.Value;
                     }
                     else if (mask.AbstrMsk.scavKing)
                     {
                         knockback *= .4f;
+                        maskKnockback *= .4f;
                         stunBonus = ShinyShieldMaskOptions.scavKingMaskStun.Value;
                     }
+                    else if(mask.King)
+                    {
+                        knockback *= .75f;
+                        maskKnockback *= .65f;
+                        stunBonus = ShinyShieldMaskOptions.vultureKingMaskStun.Value;
+                    }
+
                     player.firstChunk.vel += knockback;
 
                     player.Stun((int)(10f * stunBonus));
                     if(stunBonus > 0f && stunBonus < 1.6f)
                     {
-                        if(graspIndex < player.grasps.Length)
+                        if(graspIndex >= 0)
+                        {
                             player.ReleaseGrasp(graspIndex);
-                        else if(hasLancerMod && graspIndex == 4)
+                        }
+                        else if (hasFaceMask)
+                        {
+                            faceMaskHooks.ReleaseFaceMaskFromPlayer(player, false);
+                        }
+                        else if(hasLunterMask)
                         {
                             ReleaseLunterMask(player);
                         }
+                        mask.firstChunk.vel = player.mainBodyChunk.vel + maskKnockback;
                     }
                     else if(stunBonus >= 1.6f)
                     {
                         player.LoseAllGrasps();
-                        if (hasLancerMod && graspIndex == 4)
-                        {
+                        if (hasFaceMask)
+                            faceMaskHooks.ReleaseFaceMaskFromPlayer(player, false);
+                        else if (hasLunterMask)
                             ReleaseLunterMask(player);
-                        }
+
+                        mask.firstChunk.vel = player.mainBodyChunk.vel + maskKnockback;
                     }
-                    self.room.PlaySound(SoundID.Spear_Bounce_Off_Creauture_Shell, self.firstChunk);
+
                     HitEffect(self.firstChunk.vel, result.collisionPoint, self.room);
-                    self.vibrate = 20;
-                    self.ChangeMode(Weapon.Mode.Free);
-                    self.firstChunk.vel = self.firstChunk.vel * -0.5f + Custom.DegToVec(UnityEngine.Random.value * 360f) * Mathf.Lerp(0.1f, 0.4f, UnityEngine.Random.value) * self.firstChunk.vel.magnitude;
-                    self.SetRandomSpin();
+                    SetSpearBouncing(self);
                     return false;
                 }
                 else
@@ -300,39 +371,40 @@ namespace ShinyShieldMask
 
                     if (frontalHit)
                     {
-                        Vector2 b = self.firstChunk.vel * self.firstChunk.mass / scavenger.bodyChunks[2].mass;
-                        scavenger.bodyChunks[2].vel += b;
+                        Vector2 knockback = self.firstChunk.vel * self.firstChunk.mass / scavenger.bodyChunks[2].mass;
+                        scavenger.bodyChunks[2].vel += knockback;
 
                         if(!scavenger.King) 
-                            scavenger.Violence(self.firstChunk, self.firstChunk.vel, scavenger.bodyChunks[2], result.onAppendagePos, Creature.DamageType.Blunt, 0.02f, 5f);
-                        self.room.PlaySound(SoundID.Spear_Bounce_Off_Creauture_Shell, self.firstChunk);
+                            scavenger.Violence(self.firstChunk, self.firstChunk.vel, scavenger.bodyChunks[2], result.onAppendagePos, Creature.DamageType.Blunt, 0.04f, 5f);
+                        
                         HitEffect(self.firstChunk.vel, result.collisionPoint, self.room);
-                        self.vibrate = 20;
-                        self.ChangeMode(Weapon.Mode.Free);
-                        self.firstChunk.vel = self.firstChunk.vel * -0.5f + Custom.DegToVec(UnityEngine.Random.value * 360f) * Mathf.Lerp(0.1f, 0.4f, UnityEngine.Random.value) * self.firstChunk.vel.magnitude;
-                        self.SetRandomSpin();
+                        SetSpearBouncing(self);
                         return false;
-
-                    }
-                    else return orig(self, result, eu);
-                    
+                    }        
                 }
-                else return orig(self, result, eu);
             }
-            else
-                return orig(self, result, eu);
+            return orig(self, result, eu);
+        }
+
+        private void SetSpearBouncing(Spear spear)
+        {
+            spear.room.PlaySound(SoundID.Spear_Bounce_Off_Creauture_Shell, spear.firstChunk);
+            spear.vibrate = 20;
+            spear.ChangeMode(Weapon.Mode.Free);
+            spear.firstChunk.vel = spear.firstChunk.vel * -0.5f + Custom.DegToVec(UnityEngine.Random.value * 360f) * Mathf.Lerp(0.1f, 0.4f, UnityEngine.Random.value) * spear.firstChunk.vel.magnitude;
+            spear.SetRandomSpin();
         }
 
         public bool IsWearingMask(Player player, out int graspIndex, out VultureMask mask)
         {
             
             bool isWearingMask = false;
-            graspIndex = 0;
+            graspIndex = -1;
             mask = null;
             for (int i = 0; i < player.grasps.Length; i++)
             {
                 if (!(player.grasps[i] is null) && player.grasps[i].grabbed is VultureMask vMask && 
-                    (vMask.donned > .75f || hasLancerMod))
+                    (vMask.donned > .75f))
                 {
                     isWearingMask = true;
                     mask = vMask;
@@ -341,8 +413,6 @@ namespace ShinyShieldMask
                     
                 }
             }
-
-
             return isWearingMask;
         }
 
@@ -358,39 +428,32 @@ namespace ShinyShieldMask
             room.AddObject(new StationaryEffect(basePos, new Color(1f, 1f, 1f), null, StationaryEffect.EffectType.FlashingOrb));
         }
 
-        private bool LancerCheck(Player player, out int graspIndex, out VultureMask mask)
+        private bool LunterMaskCheck(Player player, out VultureMask mask)
         {
-            graspIndex = 0;
             mask = null;
             var sub = ModifyCat.GetSub<CatSub.Cat.CatSupplement>(player);
             BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-            if (sub.GetType().Name != "LunterSupplement") 
+            if (sub is null || sub.GetType().Name != "LunterSupplement") 
                 return false;
             var maskOnHorn = sub.GetType().GetField("maskOnHorn", flags).GetValue(sub);
             bool HasAMask = (bool)maskOnHorn.GetType().GetProperty("HasAMask", flags).GetGetMethod().Invoke(maskOnHorn, null);
             if (HasAMask)
-            {
-                graspIndex = 4;
                 mask = (VultureMask)maskOnHorn.GetType().GetProperty("Mask", flags).GetGetMethod().Invoke(maskOnHorn, null);
-            }
+            
             return HasAMask;
         }
 
         private void ReleaseLunterMask(Player player)
         {
-            Debug.Log("Called Release Lunter Mask");
             var sub = ModifyCat.GetSub<CatSub.Cat.CatSupplement>(player);
             BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
             if (sub.GetType().Name != "LunterSupplement")
             {
-                Debug.Log("LunterSupplement not found.");
                 return;
             }
-            Debug.Log("LunterSupplement found.");
             var maskOnHorn = sub.GetType().GetField("maskOnHorn", flags).GetValue(sub);
-            Debug.Log("Attempting to call DropMask.");
-            maskOnHorn.GetType().GetMethod("DropMask", flags).Invoke(maskOnHorn, new System.Object[] { true });
+            maskOnHorn.GetType().GetMethod("DropMask", flags).Invoke(maskOnHorn, new System.Object[] { false });
         }
-
+        
     }
 }
