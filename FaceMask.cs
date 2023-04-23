@@ -11,7 +11,7 @@ namespace ShinyShieldMask
     //Adapted from Pinocular's Lancer mod (MaskOnHorn class)
     public class FaceMask
     {
-        internal FaceMask(Player owner)
+        public FaceMask(Player owner)
         {
             this.player = owner;
             increment = false;
@@ -44,8 +44,8 @@ namespace ShinyShieldMask
                     hasSlug = true;
             }
 
-            hasSpear = hasSpear || (bool)player.spearOnBack?.HasASpear;
-            hasSlug = hasSlug || (bool)player.slugOnBack?.HasASlug;
+            hasSpear = hasSpear || (!(player.spearOnBack is null) && player.spearOnBack.HasASpear);
+            hasSlug = hasSlug || (!(player.slugOnBack is null) && player.slugOnBack.HasASlug);
 
             if (((player.CanPutSpearToBack || player.CanRetrieveSpearFromBack) && hasSpear) ||
                 ((player.CanPutSlugToBack || player.CanRetrieveSlugFromBack) && hasSlug))
@@ -76,6 +76,10 @@ namespace ShinyShieldMask
                 else if (player.grasps[i]?.grabbed is Player)
                     hasSlug = true;
             }
+
+            hasSpear = hasSpear || (!(player.spearOnBack is null) && player.spearOnBack.HasASpear);
+            hasSlug = hasSlug || (!(player.slugOnBack is null) && player.slugOnBack.HasASlug);
+
             if (((player.CanPutSpearToBack || player.CanRetrieveSpearFromBack) && hasSpear) ||
                 ((player.CanPutSlugToBack || player.CanRetrieveSlugFromBack) && hasSlug))
                 return false;
@@ -224,7 +228,7 @@ namespace ShinyShieldMask
             abstractStick = null;
         }
 
-        internal class AbstractFaceMask : AbstractPhysicalObject.AbstractObjectStick
+        public class AbstractFaceMask : AbstractPhysicalObject.AbstractObjectStick
         {
             public AbstractFaceMask(AbstractPhysicalObject player, AbstractPhysicalObject mask, FaceMask faceMask) : base(player, mask)
             {
