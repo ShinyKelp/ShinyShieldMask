@@ -277,7 +277,7 @@ namespace ShinyShieldMask
 
         public int ScavNoPickUpFaceMaskWeapon(On.ScavengerAI.orig_WeaponScore orig, ScavengerAI self, PhysicalObject obj, bool pickupDropInsteadOfWeaponSelection)
         {
-            if(ModManager.MMF && obj is VultureMask mask)
+            if(obj is VultureMask mask)
             {
                 foreach (var pair in playerFaceMasks)
                 {
@@ -289,7 +289,7 @@ namespace ShinyShieldMask
         }
         public int ScavNoPickUpFaceMaskCollect(On.ScavengerAI.orig_CollectScore_PhysicalObject_bool orig, ScavengerAI self, PhysicalObject obj, bool weaponFiltered)
         {
-            if (ModManager.MMF && obj is VultureMask mask)
+            if (obj is VultureMask mask)
             {
                 foreach (var pair in playerFaceMasks)
                 {
