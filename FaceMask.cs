@@ -1,9 +1,4 @@
 ﻿using RWCustom;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
 
 namespace ShinyShieldMask
@@ -24,6 +19,7 @@ namespace ShinyShieldMask
         private bool interactionLocked;
         internal AbstractFaceMask abstractStick;
         private int counter;
+        public bool HasAMask => Mask != null;
 
         public void LockInteraction()
         {
@@ -87,11 +83,8 @@ namespace ShinyShieldMask
             return HasAMask && grasp > -1;
         }
 
-        public bool HasAMask => Mask != null;
-
         public void Update(bool eu)
         {
-            
             if (HasAMask)
             {
                 if (Mask.slatedForDeletetion)
@@ -117,14 +110,12 @@ namespace ShinyShieldMask
             increment = player.input[0].pckp && !interactionLocked
                 && (CanPutMaskOnFace() || CanRetrieveMaskFromFace());
 
-
             if (player.input[0].pckp && !(player.grasps[0] is null) && player.grasps[0].grabbed is Creature creature &&
                 player.CanEatMeat(creature) && creature.Template.meatPoints > 0)
                 LockInteraction();
             else if (player.swallowAndRegurgitateCounter > 90)
                 LockInteraction();
             
-                
             if (!interactionLocked && increment)
             {
                 ++counter;
@@ -155,8 +146,6 @@ namespace ShinyShieldMask
                 interactionLocked = false;
             increment = false;
         }
-
-        
 
         public void MaskToHand(bool eu)
         {

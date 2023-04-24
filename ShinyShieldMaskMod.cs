@@ -9,7 +9,6 @@ using Mono.Cecil.Cil;
 using MonoMod.Cil;
 using System.Reflection;
 using LancerRemix.Cat;
-using System.Collections.Generic;
 
 [module: UnverifiableCode]
 [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
@@ -20,13 +19,11 @@ namespace ShinyShieldMask
     public class ShinyShieldMaskMod : BaseUnityPlugin
     {
 
-        private int count;
         private bool hasLancerMod, hasDropButton;
-        private FaceMaskHooks faceMaskHooks;
+        private FaceMasksHandler faceMasksHandler;
         private void OnEnable()
         {
             On.RainWorld.OnModsInit += RainWorldOnOnModsInit;
-            count = 0;
         }
 
         private bool IsInit;
@@ -58,9 +55,9 @@ namespace ShinyShieldMask
                 On.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship1;
                 On.RainWorldGame.ShutDownProcess += RainWorldGameOnShutDownProcess;
                 On.GameSession.ctor += GameSessionOnctor;
-                if (faceMaskHooks is null)
-                    faceMaskHooks = new FaceMaskHooks();
-                else faceMaskHooks.ClearMasks();
+                if (faceMasksHandler is null)
+                    faceMasksHandler = new FaceMasksHandler();
+                else faceMasksHandler.ClearMasks();
                 SetFaceMaskHooks();
                 MachineConnector.SetRegisteredOI("ShinyKelp.ShinyShieldMask", ShinyShieldMaskOptions.instance);
                 Debug.Log("Finished applying hooks for Shiny Shield Mask!");
@@ -76,36 +73,36 @@ namespace ShinyShieldMask
 
         public void SetFaceMaskHooks()
         {
-            On.Player.Update += faceMaskHooks.FaceMaskUpdate;
-            On.Player.ObjectEaten += faceMaskHooks.ObjectEatenWithFaceMask;
-            On.Player.Die += faceMaskHooks.DropFaceMaskOnDeath;
-            On.Player.Stun += faceMaskHooks.DropMaskOnStun;
-            On.Player.Destroy += faceMaskHooks.Player_Destroy;
-            On.Creature.Violence += faceMaskHooks.DropFaceMaskOnViolence;
-            On.ScavengerAI.WeaponScore += faceMaskHooks.ScavNoPickUpFaceMaskWeapon;
-            On.ScavengerAI.CollectScore_PhysicalObject_bool += faceMaskHooks.ScavNoPickUpFaceMaskCollect;
-            On.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += faceMaskHooks.LizardSeeFaceMask;
-            On.Player.Grabbed += faceMaskHooks.Grabbed;
-            On.Player.GrabUpdate += faceMaskHooks.Player_GrabUpdate;
-            IL.Player.GrabUpdate += faceMaskHooks.Player_GrabUpdate;
-            On.Player.ctor += faceMaskHooks.Player_ctor;
+            On.Player.Update += faceMasksHandler.FaceMaskUpdate;
+            On.Player.ObjectEaten += faceMasksHandler.ObjectEatenWithFaceMask;
+            On.Player.Die += faceMasksHandler.DropFaceMaskOnDeath;
+            On.Player.Stun += faceMasksHandler.DropMaskOnStun;
+            On.Player.Destroy += faceMasksHandler.Player_Destroy;
+            On.Creature.Violence += faceMasksHandler.DropFaceMaskOnViolence;
+            On.ScavengerAI.WeaponScore += faceMasksHandler.ScavNoPickUpFaceMaskWeapon;
+            On.ScavengerAI.CollectScore_PhysicalObject_bool += faceMasksHandler.ScavNoPickUpFaceMaskCollect;
+            On.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += faceMasksHandler.LizardSeeFaceMask;
+            On.Player.Grabbed += faceMasksHandler.Grabbed;
+            On.Player.GrabUpdate += faceMasksHandler.Player_GrabUpdate;
+            IL.Player.GrabUpdate += faceMasksHandler.Player_GrabUpdate;
+            On.Player.ctor += faceMasksHandler.Player_ctor;
 
-            On.VultureMask.DrawSprites += faceMaskHooks.FaceMaskDrawSprites;
-            On.VultureMask.Update += faceMaskHooks.VultureMask_Update_Patch;
+            On.VultureMask.DrawSprites += faceMasksHandler.FaceMaskDrawSprites;
+            On.VultureMask.Update += faceMasksHandler.VultureMask_Update_Patch;
 
-            faceMaskHooks.SetVariables(hasLancerMod, hasDropButton);
+            faceMasksHandler.SetVariables(hasLancerMod, hasDropButton);
         }
 
 
         private void RainWorldGameOnShutDownProcess(On.RainWorldGame.orig_ShutDownProcess orig, RainWorldGame self)
         {
-            faceMaskHooks.ClearMasks();
+            faceMasksHandler.ClearMasks();
             orig(self);
         }
 
         private void GameSessionOnctor(On.GameSession.orig_ctor orig, GameSession self, RainWorldGame game)
         {
-            faceMaskHooks.ClearMasks();
+            faceMasksHandler.ClearMasks();
             orig(self, game);
         }
 
@@ -295,7 +292,7 @@ namespace ShinyShieldMask
                 bool hasLunterMask = false, hasFaceMask = false;
 
                 if (IsWearingMask(player, out int graspIndex, out VultureMask mask) || 
-                    (ShinyShieldMaskOptions.wearableMask.Value && (hasFaceMask = faceMaskHooks.IsPlayerWearingMask(player, out mask))) ||
+                    (ShinyShieldMaskOptions.wearableMask.Value && (hasFaceMask = faceMasksHandler.IsPlayerWearingMask(player, out mask))) ||
                     (hasLancerMod && (hasLunterMask = LunterMaskCheck(player, out mask))) )
                 {
 
@@ -338,7 +335,7 @@ namespace ShinyShieldMask
                         }
                         else if (hasFaceMask)
                         {
-                            faceMaskHooks.ReleaseFaceMaskFromPlayer(player, false);
+                            faceMasksHandler.ReleaseFaceMaskFromPlayer(player, false);
                         }
                         else if(hasLunterMask)
                         {
@@ -350,7 +347,7 @@ namespace ShinyShieldMask
                     {
                         player.LoseAllGrasps();
                         if (hasFaceMask)
-                            faceMaskHooks.ReleaseFaceMaskFromPlayer(player, false);
+                            faceMasksHandler.ReleaseFaceMaskFromPlayer(player, false);
                         else if (hasLunterMask)
                             ReleaseLunterMask(player);
 

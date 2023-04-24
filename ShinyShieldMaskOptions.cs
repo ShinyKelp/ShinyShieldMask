@@ -6,15 +6,14 @@ namespace ShinyShieldMask
 {
     public class ShinyShieldMaskOptions : OptionInterface
     {
-        private readonly ManualLogSource Logger;
 
         public static ShinyShieldMaskOptions instance = new ShinyShieldMaskOptions();
 
         public static readonly Configurable<float> vultureMaskStun = instance.config.Bind<float>("VultureMaskStun", 1.8f, new ConfigAcceptableRange<float>(0f, 10f));
         public static readonly Configurable<float> vultureKingMaskStun = instance.config.Bind<float>("VultureKingMaskStun", 1f, new ConfigAcceptableRange<float>(0f, 10f));
         public static readonly Configurable<float> scavKingMaskStun = instance.config.Bind<float>("KingMaskStun", 0f, new ConfigAcceptableRange<float>(0f, 10f));
-        public static readonly Configurable<float> eliteScavMaskStun = instance.config.Bind<float>("EliteScavMaskStun", 0.4f, new ConfigAcceptableRange<float>(0f, 10f));
-        public static readonly Configurable<float> eliteResistance = instance.config.Bind<float>("EliteResistance", .3f, new ConfigAcceptableRange<float>(0f, 1f));
+        public static readonly Configurable<float> eliteScavMaskStun = instance.config.Bind<float>("EliteScavMaskStun", 1.8f, new ConfigAcceptableRange<float>(0f, 10f));
+        public static readonly Configurable<float> eliteResistance = instance.config.Bind<float>("EliteResistance", 0f, new ConfigAcceptableRange<float>(0f, 1f));
         public static readonly Configurable<bool> enableShieldMask = instance.config.Bind<bool>("EnableShieldMask", true);
         public static readonly Configurable<bool> randomFearDuration = instance.config.Bind<bool>("RandomFearDuration", false);
         public static readonly Configurable<int> vultureMaskFearDuration = instance.config.Bind<int>("VultureMaskFear", 18, new ConfigAcceptableRange<int>(0, 999));
