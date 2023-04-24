@@ -15,7 +15,7 @@ using LancerRemix.Cat;
 
 namespace ShinyShieldMask
 {
-    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.2.0")]
+    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.2.1")]
     public class ShinyShieldMaskMod : BaseUnityPlugin
     {
 
