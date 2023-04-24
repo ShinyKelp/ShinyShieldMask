@@ -20,6 +20,7 @@ namespace ShinyShieldMask
         public static readonly Configurable<int> kingVultureMaskFearDuration = instance.config.Bind<int>("KingVultureMaskFear", 30, new ConfigAcceptableRange<int>(0, 999));
         public static readonly Configurable<int> eliteScavFearDuration = instance.config.Bind<int>("EliteScavFear", 0, new ConfigAcceptableRange<int>(0, 999));
         public static readonly Configurable<bool> wearableMask = instance.config.Bind<bool>("WearableMask", false);
+        public static readonly Configurable<bool> wearableMaskAlternateInput = instance.config.Bind<bool>("WearableMaskAltInput", false);
 
         private UIelement[] UIArrPlayerOptions;
 
@@ -37,7 +38,7 @@ namespace ShinyShieldMask
 
                 new OpRect(new Vector2 (0f, 248f), new Vector2(257f, 305f)),
                 new OpCheckBox(enableShieldMask, new Vector2(15f, 520f)),
-                new OpLabel(43f, 525f, "Enable shield mask funcionality"),
+                new OpLabel(43f, 523f, "Enable shield mask funcionality"),
                 new OpLabel(15f, 490f, "Vulture Mask stun value"),
                 new OpFloatSlider(vultureMaskStun,new Vector2(20f, 460f), 200)
                 {
@@ -79,15 +80,20 @@ namespace ShinyShieldMask
                 {
                     description = "Up to 50% more or less duration"
                 },
-                new OpLabel(43f, 90f, "Randomize fear duration"),
+                new OpLabel(43f, 88f, "Randomize fear duration"),
 
-                new OpRect(new Vector2(282f, 248f), new Vector2(250f, 80f)),
-                new OpCheckBox(wearableMask, new Vector2(360f, 258f))
+                new OpRect(new Vector2(282f, 223f), new Vector2(250f, 105f)),
+                new OpCheckBox(wearableMask, new Vector2(360f, 260f))
                 {
                     description = "Hold GRAB to place the mask on your face.",
                 },
                 new OpLabel(298f, 295f, "Wearable vulture mask", true),
-
+                new OpCheckBox(wearableMaskAlternateInput, new Vector2(300f, 230f))
+                {
+                    description = "Input to grab/release mask will be UP+GRAB instead."
+                },
+                new OpLabel(328f, 233f, "Alternate Input"),
+                
             };
 
             opTab.AddItems(UIArrPlayerOptions);

@@ -107,8 +107,8 @@ namespace ShinyShieldMask
                 }
             }
 
-            increment = player.input[0].pckp && !interactionLocked
-                && (CanPutMaskOnFace() || CanRetrieveMaskFromFace());
+            increment = player.input[0].pckp && (!ShinyShieldMaskOptions.wearableMaskAlternateInput.Value || player.input[0].y > 0)
+                && !interactionLocked && (CanPutMaskOnFace() || CanRetrieveMaskFromFace());
 
             if (player.input[0].pckp && !(player.grasps[0] is null) && player.grasps[0].grabbed is Creature creature &&
                 player.CanEatMeat(creature) && creature.Template.meatPoints > 0)
