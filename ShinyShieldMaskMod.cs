@@ -89,6 +89,7 @@ namespace ShinyShieldMask
 
             On.VultureMask.DrawSprites += faceMasksHandler.FaceMaskDrawSprites;
             On.VultureMask.Update += faceMasksHandler.VultureMask_Update_Patch;
+            On.PlayerGraphics.PlayerObjectLooker.HowInterestingIsThisObject += faceMasksHandler.PlayerNoLookAtFaceMask;
 
             faceMasksHandler.SetVariables(hasLancerMod, hasDropButton);
           

@@ -220,7 +220,7 @@ namespace ShinyShieldMask
 
         public float PlayerNoLookAtFaceMask(On.PlayerGraphics.PlayerObjectLooker.orig_HowInterestingIsThisObject orig, PlayerGraphics.PlayerObjectLooker self, PhysicalObject obj)
         {
-            if(obj is VultureMask vmask && PlayerFaceMasks.TryGetValue(self.owner.player, out FaceMask fMask))
+            if (obj is VultureMask vmask && PlayerFaceMasks.TryGetValue(self.owner.player, out FaceMask fMask))
             {
                 if (fMask.Mask == vmask)
                     return 0f;
