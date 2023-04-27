@@ -82,7 +82,7 @@ namespace ShinyShieldMask
             On.ScavengerAI.WeaponScore += faceMasksHandler.ScavNoPickUpFaceMaskWeapon;
             On.ScavengerAI.CollectScore_PhysicalObject_bool += faceMasksHandler.ScavNoPickUpFaceMaskCollect;
             On.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += faceMasksHandler.LizardSeeFaceMask;
-            On.Player.Grabbed += faceMasksHandler.Grabbed;
+            //On.Player.Grabbed += faceMasksHandler.Grabbed;
             On.Player.GrabUpdate += faceMasksHandler.Player_GrabUpdate;
             IL.Player.GrabUpdate += faceMasksHandler.Player_GrabUpdate;
             On.Player.ctor += faceMasksHandler.Player_ctor;
@@ -91,8 +91,10 @@ namespace ShinyShieldMask
             On.VultureMask.Update += faceMasksHandler.VultureMask_Update_Patch;
 
             faceMasksHandler.SetVariables(hasLancerMod, hasDropButton);
+          
         }
 
+        
 
         private void RainWorldGameOnShutDownProcess(On.RainWorldGame.orig_ShutDownProcess orig, RainWorldGame self)
         {

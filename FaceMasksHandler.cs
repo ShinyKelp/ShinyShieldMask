@@ -9,6 +9,7 @@ using MonoMod.Cil;
 using Mono.Cecil.Cil;
 using DropButton;
 using ImprovedInput;
+using MoreSlugcats;
 
 [module: UnverifiableCode]
 [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
@@ -57,6 +58,7 @@ namespace ShinyShieldMask
                 FaceMaskPlayers.Add(fMask, player);
             }
         }
+        
         public bool IsPlayerWearingMask(Player player, out VultureMask mask)
         {
             mask = null;
@@ -72,6 +74,7 @@ namespace ShinyShieldMask
                 return;
             fMask.DropMask(fling);
         }
+        
         public void Player_ctor(On.Player.orig_ctor orig, Player self, AbstractCreature abstractCreature, World world)
         {
             orig(self, abstractCreature, world);
@@ -215,6 +218,16 @@ namespace ShinyShieldMask
                 fMask.Update(eu);
         }
 
+        public float PlayerNoLookAtFaceMask(On.PlayerGraphics.PlayerObjectLooker.orig_HowInterestingIsThisObject orig, PlayerGraphics.PlayerObjectLooker self, PhysicalObject obj)
+        {
+            if(obj is VultureMask vmask && PlayerFaceMasks.TryGetValue(self.owner.player, out FaceMask fMask))
+            {
+                if (fMask.Mask == vmask)
+                    return 0f;
+            }
+            return orig(self, obj);
+        }
+
         public void VultureMask_Update_Patch(On.VultureMask.orig_Update orig, VultureMask self, bool eu)
         {
             FaceMask.AbstractFaceMask abstractMask = null;
@@ -232,17 +245,28 @@ namespace ShinyShieldMask
             {
                 self.donned = 1f;
                 self.lastDonned = 1f;
-
                 self.Grabbed(abstractMask.abstractGrasp);
                 orig(self, eu);
                 self.grabbedBy.Clear();
                 self.viewFromSide = Custom.LerpAndTick(self.viewFromSide, (float)player.input[0].x, 0.11f, 0.093333335f);
-
             }
             else
                 orig(self, eu);
-        }
 
+        }
+        
+        public void Player_GraphicsModuleUpdatedPatch(On.Player.orig_GraphicsModuleUpdated orig, Player self, bool actuallyViewed, bool eu)
+        {
+            orig(self, actuallyViewed, eu);
+            if(PlayerFaceMasks.TryGetValue(self, out FaceMask fMask))
+            {
+                if (fMask.HasAMask && actuallyViewed)
+                {
+                    fMask.Mask.bodyChunks[0].MoveFromOutsideMyUpdate(eu,
+                        (self.graphicsModule as PlayerGraphics).hands[fMask.abstractStick.abstractGrasp.graspUsed].pos);
+                }
+            }
+        }
         public void FaceMaskDrawSprites(On.VultureMask.orig_DrawSprites orig, VultureMask self, RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
         {
             FaceMask.AbstractFaceMask abstractMask = null;
@@ -260,13 +284,14 @@ namespace ShinyShieldMask
             {
                 self.donned = 1f;
                 self.lastDonned = 1f;
-                self.Grabbed(new Creature.Grasp(player, self, 0, 0, Creature.Grasp.Shareability.CanNotShare, 0f, false));
+                self.Grabbed(abstractMask.abstractGrasp);
                 orig(self, sLeaser, rCam, timeStacker, camPos);
-                self.grabbedBy.Clear();
 
+                self.grabbedBy.Clear();
             }
             else
                 orig(self, sLeaser, rCam, timeStacker, camPos);
+
         }
 
         public int ScavNoPickUpFaceMaskWeapon(On.ScavengerAI.orig_WeaponScore orig, ScavengerAI self, PhysicalObject obj, bool pickupDropInsteadOfWeaponSelection)
@@ -299,6 +324,8 @@ namespace ShinyShieldMask
             BodyChunk source, Vector2? directionAndMomentum, BodyChunk hitChunk, PhysicalObject.Appendage.Pos hitAppendage, Creature.DamageType type, float damage, float stunBonus)
         {
             orig(self, source, directionAndMomentum, hitChunk, hitAppendage, type, damage, stunBonus);
+            if (!(source is null) && source.owner is Creature creature && creature.abstractCreature.creatureTemplate.TopAncestor().type == CreatureTemplate.Type.Leech)
+                return;
             if ((self is Player player) && PlayerFaceMasks.TryGetValue(player, out FaceMask mask))
                 mask.DropMask();
         }
@@ -323,6 +350,9 @@ namespace ShinyShieldMask
         public void Grabbed(On.Player.orig_Grabbed orig, Player self, Creature.Grasp grasp)
         {
             orig(self, grasp);
+            if(grasp.grabber.abstractCreature.creatureTemplate.TopAncestor().type == CreatureTemplate.Type.Leech ||
+                grasp.grabber.abstractCreature.creatureTemplate.type == CreatureTemplate.Type.TentaclePlant)
+                return;
             if (PlayerFaceMasks.TryGetValue(self, out FaceMask mask))
                 mask.DropMask();
         }
