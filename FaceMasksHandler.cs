@@ -248,7 +248,12 @@ namespace ShinyShieldMask
                 self.Grabbed(abstractMask.abstractGrasp);
                 orig(self, eu);
                 self.grabbedBy.Clear();
-                self.viewFromSide = Custom.LerpAndTick(self.viewFromSide, (float)player.input[0].x, 0.11f, 0.093333335f);
+                if(player.bodyMode == Player.BodyModeIndex.Crawl)
+                {
+                    self.viewFromSide = Custom.LerpAndTick(self.viewFromSide, Mathf.Sign(player.bodyChunks[0].pos.x - player.bodyChunks[1].pos.x), 0.11f, 0.143333335f);
+                }
+                else if(player.animation != Player.AnimationIndex.ClimbOnBeam)
+                    self.viewFromSide = Custom.LerpAndTick(self.viewFromSide, (float)player.input[0].x, 0.11f, 0.143333335f);
             }
             else
                 orig(self, eu);
