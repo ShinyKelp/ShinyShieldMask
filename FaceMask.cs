@@ -93,10 +93,7 @@ namespace ShinyShieldMask
                     Mask = null;
                     return;
                 }
-
                 Mask.Forbid();
-                Mask.bodyChunks[0].pos = player.bodyChunks[0].pos;
-
                 foreach (Creature.Grasp grasp in player.grasps)
                 {
                     if(!(grasp is null) && grasp.grabbed is VultureMask mask)
@@ -150,6 +147,7 @@ namespace ShinyShieldMask
         public void MaskToHand(bool eu)
         {
             if (Mask == null) return;
+            Mask.firstChunk.pos = player.mainBodyChunk.pos;
             for (int i = 0; i < player.grasps.Length; i++)
             {
                 if (player.grasps[i] != null)
