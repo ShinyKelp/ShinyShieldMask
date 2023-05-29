@@ -199,7 +199,7 @@ namespace ShinyShieldMask
             orig(self, st);
             if(PlayerFaceMasks.TryGetValue(self, out FaceMask mask))
             {
-                if (mask.HasAMask && st > UnityEngine.Random.Range(40, 80))
+                if (mask.HasAMask && st > UnityEngine.Random.Range(40, 80) * (mask.Mask.AbstrMsk.scavKing? 2 : 1))
                     mask.DropMask();
             }
         }
@@ -254,6 +254,14 @@ namespace ShinyShieldMask
                 }
                 else if(player.animation != Player.AnimationIndex.ClimbOnBeam && player.bodyMode != Player.BodyModeIndex.CorridorClimb)
                     self.viewFromSide = Custom.LerpAndTick(self.viewFromSide, (float)player.input[0].x, 0.11f, 0.143333335f);
+                if(self.AbstrMsk.scavKing && player.standing && player.animation == Player.AnimationIndex.None)
+                {
+                    if(self.viewFromSide < 0.1f && self.viewFromSide > -0.1f)
+                    {
+                        self.viewFromSide = Mathf.Sign(self.viewFromSide) * 0.02f;
+                    }
+                }
+                
             }
             else
                 orig(self, eu);
@@ -331,7 +339,7 @@ namespace ShinyShieldMask
             orig(self, source, directionAndMomentum, hitChunk, hitAppendage, type, damage, stunBonus);
             if (!(source is null) && source.owner is Creature creature && creature.abstractCreature.creatureTemplate.TopAncestor().type == CreatureTemplate.Type.Leech)
                 return;
-            if ((self is Player player) && PlayerFaceMasks.TryGetValue(player, out FaceMask mask))
+            if ((self is Player player) && PlayerFaceMasks.TryGetValue(player, out FaceMask mask) && mask.HasAMask && !mask.Mask.AbstrMsk.scavKing)
                 mask.DropMask();
         }
 

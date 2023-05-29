@@ -92,7 +92,6 @@ namespace ShinyShieldMask
             On.PlayerGraphics.PlayerObjectLooker.HowInterestingIsThisObject += faceMasksHandler.PlayerNoLookAtFaceMask;
 
             faceMasksHandler.SetVariables(hasLancerMod, hasDropButton);
-          
         }
 
         
@@ -114,10 +113,14 @@ namespace ShinyShieldMask
             if ((ShinyShieldMaskOptions.eliteScavFearDuration.Value == 0) ||
                 dRelation is null || dRelation.trackerRep is null || dRelation.trackerRep.representedCreature is null ||
                 dRelation.trackerRep.representedCreature.realizedCreature is null ||
-                dRelation.trackerRep.representedCreature.creatureTemplate.type != MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite)
+                !(dRelation.trackerRep.representedCreature.creatureTemplate.type == MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite ||
+                dRelation.trackerRep.representedCreature.creatureTemplate.type == MoreSlugcatsEnums.CreatureTemplateType.ScavengerKing))
                 return orig(self, dRelation);
 
-            if (self.usedToVultureMask < ShinyShieldMaskOptions.eliteScavFearDuration.Value*40 &&
+            int maxUsed = (dRelation.trackerRep.representedCreature.creatureTemplate.type == MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite)?
+                ShinyShieldMaskOptions.eliteScavFearDuration.Value * 40 : ShinyShieldMaskOptions.eliteScavFearDuration.Value * 80;
+
+            if (self.usedToVultureMask < maxUsed &&
                 self.creature.creatureTemplate.type != CreatureTemplate.Type.RedLizard &&
                 self.creature.creatureTemplate.type != CreatureTemplate.Type.BlackLizard &&
                 !dRelation.trackerRep.representedCreature.realizedCreature.dead)
@@ -310,20 +313,20 @@ namespace ShinyShieldMask
                         mask.maskGfx.overrideSprite == "SpikeMask" || mask.maskGfx.overrideSprite == "HornedMask" ||
                         mask.maskGfx.overrideSprite == "SadMask"))
                     {
-                        knockback *= .75f;
-                        maskKnockback *= .65f;
+                        knockback *= .85f;
+                        maskKnockback *= .75f;
                         stunBonus = ShinyShieldMaskOptions.eliteScavMaskStun.Value;
                     }
                     else if (mask.AbstrMsk.scavKing)
                     {
-                        knockback *= .4f;
-                        maskKnockback *= .4f;
+                        knockback *= .65f;
+                        maskKnockback *= .55f;
                         stunBonus = ShinyShieldMaskOptions.scavKingMaskStun.Value;
                     }
                     else if(mask.King)
                     {
-                        knockback *= .75f;
-                        maskKnockback *= .65f;
+                        knockback *= .85f;
+                        maskKnockback *= .75f;
                         stunBonus = ShinyShieldMaskOptions.vultureKingMaskStun.Value;
                     }
 
