@@ -254,7 +254,7 @@ namespace ShinyShieldMask
                 }
                 else if(player.animation != Player.AnimationIndex.ClimbOnBeam && player.bodyMode != Player.BodyModeIndex.CorridorClimb)
                     self.viewFromSide = Custom.LerpAndTick(self.viewFromSide, (float)player.input[0].x, 0.11f, 0.143333335f);
-                if(self.AbstrMsk.scavKing && player.standing && player.animation == Player.AnimationIndex.None)
+                if(self.AbstrMsk.scavKing && player.standing)
                 {
                     if(self.viewFromSide < 0.1f && self.viewFromSide > -0.1f)
                     {
