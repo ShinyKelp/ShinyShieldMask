@@ -1,21 +1,22 @@
-﻿using System;
-using System.Security.Permissions;
-using System.Security;
-using BepInEx;
-using RWCustom;
-using MoreSlugcats;
-using UnityEngine;
+﻿using BepInEx;
+using LancerRemix.Cat;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
+using MoreSlugcats;
+using RWCustom;
+using System;
+using System.Collections.Generic;
 using System.Reflection;
-using LancerRemix.Cat;
-
+using System.Security;
+using System.Security.Permissions;
+using UnityEngine;
+using System.IO;
 [module: UnverifiableCode]
 [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
 
 namespace ShinyShieldMask
 {
-    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.2.4.1")]
+    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.2.5")]
     public class ShinyShieldMaskMod : BaseUnityPlugin
     {
 
@@ -24,9 +25,13 @@ namespace ShinyShieldMask
         private void OnEnable()
         {
             On.RainWorld.OnModsInit += RainWorldOnOnModsInit;
+            if (EliteMasks is null)
+                EliteMasks = new Dictionary<EntityID, KeyValuePair<bool, VultureMask.AbstractVultureMask>>();
         }
 
         private bool IsInit;
+
+        public static Dictionary<EntityID, KeyValuePair<bool, VultureMask.AbstractVultureMask>> EliteMasks;
 
         private void RainWorldOnOnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
         {
@@ -34,7 +39,7 @@ namespace ShinyShieldMask
             try
             {
                 if (IsInit) return;
-                hasLancerMod = false;
+                hasLancerMod = false; hasDropButton = false;
                 foreach(ModManager.Mod mod in ModManager.ActiveMods)
                 {
                     if (mod.id == "topicular.lancer")
@@ -49,10 +54,21 @@ namespace ShinyShieldMask
                     }
                 }
                 
-                //Your hooks go here
-                On.Spear.HitSomething += this.Spear_HitSomething;
+                //Shield functionality
+                On.Spear.HitSomething += Spear_HitSomething;
+
+                //Mask fear factor (both player and elites)
                 IL.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship;
                 On.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship1;
+
+                //Elite scavenger masks stuff here
+                On.Scavenger.ctor += CtorCheckMaskDictionary;
+                On.ScavengerGraphics.ctor += GFXCtorCheckMaskDictionary;
+                On.AbstractWorldEntity.Destroy += CheckDictionaryDeletion;
+                On.ScavengerAbstractAI.ReGearInDen += CheckReplenishMask;
+                On.Scavenger.PickUpAndPlaceInInventory += CheckIfNeedsEquipMask;
+                IL.Scavenger.Violence += DropCustomMaskOnDeath;
+
                 On.RainWorldGame.ShutDownProcess += RainWorldGameOnShutDownProcess;
                 On.GameSession.ctor += GameSessionOnctor;
                 if (faceMasksHandler is null)
@@ -70,6 +86,144 @@ namespace ShinyShieldMask
             }
         }
 
+        private void DropCustomMaskOnDeath(ILContext il)
+        {
+            ILCursor c = new ILCursor(il);
+            c.GotoNext(MoveType.After,
+                x => x.MatchStfld<Scavenger>("readyToReleaseMask")
+                );
+            c.Emit(OpCodes.Ldarg_0);
+            c.Emit(OpCodes.Ldarg_2);
+            c.EmitDelegate<Action<Scavenger, Vector2?>>((scavenger, velocity) =>
+                {
+                    VultureMaskGraphics maskfx = (scavenger.graphicsModule as ScavengerGraphics).maskGfx;
+
+                    VultureMask.AbstractVultureMask abstractVultureMask = null;
+                    if (EliteMasks.ContainsKey(scavenger.abstractCreature.ID) && EliteMasks[scavenger.abstractCreature.ID].Value != null)
+                    {
+                        abstractVultureMask = EliteMasks[scavenger.abstractCreature.ID].Value;
+                        abstractVultureMask.pos = scavenger.abstractCreature.pos;
+                    }
+                    else
+                    {
+                        //This check should never be reached, but just in case
+                        abstractVultureMask = new VultureMask.AbstractVultureMask(
+                            scavenger.room.world, null, scavenger.room.GetWorldCoordinate(scavenger.firstChunk.pos), scavenger.room.game.GetNewID(),
+                            scavenger.abstractCreature.ID.RandomSeed, maskfx.King, maskfx.ScavKing, maskfx.overrideSprite);
+                    }
+
+                    scavenger.room.abstractRoom.AddEntity(abstractVultureMask);
+                    abstractVultureMask.RealizeInRoom();
+                    (abstractVultureMask.realizedObject as VultureMask).rotVel = new Vector2(20f, 0f);
+                    (abstractVultureMask.realizedObject as VultureMask).firstChunk.vel = (!velocity.HasValue? Vector2.zero : velocity.Value) * 20f;
+                    if (EliteMasks.ContainsKey(scavenger.abstractCreature.ID))
+                    {
+                        EliteMasks[scavenger.abstractCreature.ID] = new KeyValuePair<bool, VultureMask.AbstractVultureMask>(
+                            false,
+                            abstractVultureMask);
+                    }
+                }
+            );
+            c.Emit(OpCodes.Ret);
+        }
+
+        private void CheckIfNeedsEquipMask(On.Scavenger.orig_PickUpAndPlaceInInventory orig, Scavenger self, PhysicalObject obj)
+        {
+            orig(self, obj);
+            if(obj is VultureMask && (self.Elite || self.King) && self.readyToReleaseMask)
+            {
+                (self.abstractCreature.abstractAI as ScavengerAbstractAI).bringPearlHome = true;
+            }
+        }
+
+        private void CheckReplenishMask(On.ScavengerAbstractAI.orig_ReGearInDen orig, ScavengerAbstractAI self)
+        {
+            orig(self);
+            if (self.parent.creatureTemplate.type == MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite)
+            {
+                if (EliteMasks.ContainsKey(self.parent.ID) && !EliteMasks[self.parent.ID].Key)
+                {
+                    for (int i = self.parent.stuckObjects.Count - 1; i >= 0; i--)
+                    {
+                        if (self.parent.stuckObjects[i] is AbstractPhysicalObject.CreatureGripStick && self.parent.stuckObjects[i].A == self.parent)
+                        {
+                            if (self.parent.stuckObjects[i].B.type == AbstractPhysicalObject.AbstractObjectType.VultureMask)
+                            {
+                                EliteMasks[self.parent.ID] = new KeyValuePair<bool, VultureMask.AbstractVultureMask>(
+                                    true,
+                                    self.parent.stuckObjects[i].B as VultureMask.AbstractVultureMask);
+                                self.parent.stuckObjects[i].Deactivate();
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private void CheckDictionaryDeletion(On.AbstractWorldEntity.orig_Destroy orig, AbstractWorldEntity self)
+        {
+            orig(self);
+
+            if (self is AbstractCreature creature && creature.creatureTemplate.type == MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite)
+            {
+                EliteMasks.Remove(creature.ID);
+            }
+        }
+
+        private void CtorCheckMaskDictionary(On.Scavenger.orig_ctor orig, Scavenger self, AbstractCreature abstractCreature, World world)
+        {
+            orig(self, abstractCreature, world);
+            if (self.Elite || self.King)
+            {
+                if (EliteMasks.ContainsKey(self.abstractCreature.ID))
+                {
+                    self.readyToReleaseMask = !EliteMasks[self.abstractCreature.ID].Key;
+                    //Dictionary's true means it has a mask, false it doesn't. readyToReleaseMask must be the opposite.
+                }
+                else
+                {
+                    UnityEngine.Random.InitState(self.abstractCreature.ID.RandomSeed);
+                    float chance = ShinyShieldMaskOptions.masklessEliteChance.Value / 10f;
+                    bool hasMask = UnityEngine.Random.value > chance; 
+                    if (self.King)
+                        hasMask = true;
+                    EliteMasks.Add(abstractCreature.ID, new KeyValuePair<bool, VultureMask.AbstractVultureMask>(hasMask, null));
+                    self.readyToReleaseMask = !hasMask;
+                }
+            }
+        }
+
+        private void GFXCtorCheckMaskDictionary(On.ScavengerGraphics.orig_ctor orig, ScavengerGraphics self, PhysicalObject ow)
+        {
+            orig(self, ow);
+
+            //This check should never happen, but just in case
+            if (self.scavenger.Elite || self.scavenger.King)
+            {
+                if (!EliteMasks.ContainsKey(self.scavenger.abstractCreature.ID))
+                {
+                    EliteMasks.Add(self.scavenger.abstractCreature.ID, new KeyValuePair<bool, VultureMask.AbstractVultureMask>(!self.scavenger.readyToReleaseMask, null));
+                }
+            }
+
+            if (EliteMasks.ContainsKey(self.scavenger.abstractCreature.ID))
+            {
+                if (EliteMasks[self.scavenger.abstractCreature.ID].Value is null && !self.scavenger.readyToReleaseMask)
+                {
+                    VultureMask.AbstractVultureMask mask = new VultureMask.AbstractVultureMask(self.scavenger.abstractCreature.world, null, self.scavenger.abstractCreature.pos, self.scavenger.abstractCreature.world.game.GetNewID(), 
+                        self.scavenger.abstractCreature.ID.RandomSeed, self.maskGfx.King, self.maskGfx.ScavKing, self.maskGfx.overrideSprite);
+                    EliteMasks[self.scavenger.abstractCreature.ID] = new KeyValuePair<bool, VultureMask.AbstractVultureMask>(EliteMasks[self.scavenger.abstractCreature.ID].Key, mask);
+                }
+                else if(!self.scavenger.readyToReleaseMask)
+                {
+                    self.maskGfx = new VultureMaskGraphics(self.scavenger,
+                        EliteMasks[self.scavenger.abstractCreature.ID].Value, self.MaskSprite);
+                    Debug.Log("Asigned mask to scavenger.");
+                    self.maskGfx.GenerateColor(EliteMasks[self.scavenger.abstractCreature.ID].Value.colorSeed);
+                }
+            }
+        }
 
         public void SetFaceMaskHooks()
         {
@@ -94,11 +248,10 @@ namespace ShinyShieldMask
             faceMasksHandler.SetVariables(hasLancerMod, hasDropButton);
         }
 
-        
-
         private void RainWorldGameOnShutDownProcess(On.RainWorldGame.orig_ShutDownProcess orig, RainWorldGame self)
         {
             faceMasksHandler.ClearMasks();
+            EliteMasks.Clear();
             orig(self);
         }
 
@@ -360,7 +513,7 @@ namespace ShinyShieldMask
                         mask.firstChunk.vel = player.mainBodyChunk.vel + maskKnockback;
                     }
 
-                    HitEffect(self.firstChunk.vel, result.collisionPoint, self.room);
+                    HitEffect(self, player, self.firstChunk.vel, result.collisionPoint, self.room);
                     SetSpearBouncing(self);
                     return false;
                 }
@@ -369,7 +522,7 @@ namespace ShinyShieldMask
             }
             else if(result.obj is Scavenger scavenger && !(scavenger is null) && (scavenger.Elite || scavenger.King))
             {
-                if (result.chunk == scavenger.bodyChunks[2] && !scavenger.State.dead)
+                if (result.chunk == scavenger.bodyChunks[2] && !scavenger.State.dead && !scavenger.readyToReleaseMask)
                 {
                     bool frontalHit = Vector2.Dot(self.firstChunk.vel.normalized, scavenger.HeadLookDir) >= -(scavenger.King? ShinyShieldMaskOptions.eliteResistance.Value*1.5f : ShinyShieldMaskOptions.eliteResistance.Value) ;
 
@@ -380,11 +533,49 @@ namespace ShinyShieldMask
 
                         if(!scavenger.King) 
                             scavenger.Violence(self.firstChunk, self.firstChunk.vel, scavenger.bodyChunks[2], result.onAppendagePos, Creature.DamageType.Blunt, 0.04f, 5f);
-                        
-                        HitEffect(self.firstChunk.vel, result.collisionPoint, self.room);
+
+                        //de-mask scavenger (user input here)
+                        if (ShinyShieldMaskOptions.demaskableElites.Value && !scavenger.King)
+                        {
+                            scavenger.readyToReleaseMask = true;
+                            VultureMaskGraphics maskfx = (scavenger.graphicsModule as ScavengerGraphics).maskGfx;
+
+                            VultureMask.AbstractVultureMask abstractVultureMask = null;
+                            if (EliteMasks.ContainsKey(scavenger.abstractCreature.ID) && EliteMasks[scavenger.abstractCreature.ID].Value != null)
+                            {
+                                abstractVultureMask = EliteMasks[scavenger.abstractCreature.ID].Value;
+                                abstractVultureMask.pos = scavenger.abstractCreature.pos;
+                            }
+                            else
+                            {
+                                //This check should never be reached, but just in case
+                                abstractVultureMask = new VultureMask.AbstractVultureMask(
+                                    scavenger.room.world, null, scavenger.room.GetWorldCoordinate(scavenger.firstChunk.pos), scavenger.room.game.GetNewID(),
+                                    scavenger.abstractCreature.ID.RandomSeed, maskfx.King, maskfx.ScavKing, maskfx.overrideSprite);
+                            }
+
+                            self.room.abstractRoom.AddEntity(abstractVultureMask);
+                            abstractVultureMask.RealizeInRoom();
+                            (abstractVultureMask.realizedObject as VultureMask).rotVel = new Vector2(20f, 0f);
+                            (abstractVultureMask.realizedObject as VultureMask).firstChunk.vel = self.firstChunk.vel.normalized * 20f;
+                            if (EliteMasks.ContainsKey(scavenger.abstractCreature.ID))
+                            {
+                                EliteMasks[scavenger.abstractCreature.ID] = new KeyValuePair<bool, VultureMask.AbstractVultureMask>(
+                                    false,
+                                    abstractVultureMask);
+                            }
+                        }
+
+
+                        HitEffect(self, scavenger, self.firstChunk.vel, result.collisionPoint, self.room);
                         SetSpearBouncing(self);
+
                         return false;
                     }        
+                }
+                else if (scavenger.King && !scavenger.State.dead && scavenger.armorPieces > 0)
+                {
+                    HitEffect(self, scavenger, self.firstChunk.vel, result.collisionPoint, self.room);
                 }
             }
             return orig(self, result, eu);
@@ -420,8 +611,17 @@ namespace ShinyShieldMask
             return isWearingMask;
         }
 
-        public void HitEffect(Vector2 impactVelocity, Vector2 basePos, Room room)
+        public void HitEffect(Spear spear, Creature hitCrit, Vector2 impactVelocity, Vector2 basePos, Room room)
         {
+            if(spear is ElectricSpear eSpear)
+            {
+                eSpear.Zap();
+                eSpear.Electrocute(hitCrit);
+                hitCrit.stun = 40;
+                if(hitCrit is Scavenger scav && scav.King)
+                    scav.explosionDamageCooldown = 0;
+            }
+
             int num = UnityEngine.Random.Range(3, 8);
             for (int i = 0; i < num; i++)
             {

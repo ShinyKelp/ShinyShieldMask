@@ -107,7 +107,7 @@ namespace ShinyShieldMask
                         break;
                     }
                 }
-                hasAnyGrasp = hasAnyGrasp || (bool)self.spearOnBack?.HasASpear || (bool)self.slugOnBack?.HasASlug;
+                hasAnyGrasp = hasAnyGrasp || (!(self.spearOnBack is null) && self.spearOnBack.HasASpear) || (!(self.slugOnBack is null) && self.slugOnBack.HasASlug);
 
                 if (!hasAnyGrasp)
                 {
