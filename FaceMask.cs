@@ -1,4 +1,6 @@
-﻿using RWCustom;
+﻿using ImprovedInput;
+using RWCustom;
+using System;
 using UnityEngine;
 
 namespace ShinyShieldMask
@@ -8,12 +10,13 @@ namespace ShinyShieldMask
     {
         public FaceMask(Player owner)
         {
-            this.player = owner;
+            playerRef = new WeakReference(owner);
             increment = false;
             interactionLocked = false;
         }
+        private WeakReference playerRef;
 
-        public Player player;
+        public Player Player { get { return playerRef.Target is Player player ? player : null; } }
         public VultureMask Mask { get; private set; }
         private bool increment;
         private bool interactionLocked;
@@ -29,64 +32,85 @@ namespace ShinyShieldMask
 
         public bool CanPutMaskOnFace()
         {
-            bool hasSpear = false, hasSlug = false;
-            for (int i = 0; i < 2; i++)
-            {
-                if (player.grasps[i]?.grabbed is IPlayerEdible)
-                    return false;
-                if (player.grasps[i]?.grabbed is Spear)
-                    hasSpear = true;
-                else if (player.grasps[i]?.grabbed is Player)
-                    hasSlug = true;
-            }
-
-            hasSpear = hasSpear || (!(player.spearOnBack is null) && player.spearOnBack.HasASpear);
-            hasSlug = hasSlug || (!(player.slugOnBack is null) && player.slugOnBack.HasASlug);
-
-            if (((player.CanPutSpearToBack || player.CanRetrieveSpearFromBack) && hasSpear) ||
-                ((player.CanPutSlugToBack || player.CanRetrieveSlugFromBack) && hasSlug))
-                return false;
-
-            return !HasAMask && (player.grasps[0]?.grabbed is VultureMask || player.grasps[1]?.grabbed is VultureMask);
+            return !HasAMask && (Player.grasps[0]?.grabbed is VultureMask || Player.grasps[1]?.grabbed is VultureMask);
         }
 
         public bool CanRetrieveMaskFromFace()
         {
             int grasp = -1;
-            bool hasSpear = false, hasSlug = false;
             for (int i = 0; i < 2; i++)
             {
-                if (player.grasps[i] is null) 
+                if (Player.grasps[i] is null)
                 {
-                    if(grasp == -1)
-                        grasp = i; 
-                    continue; 
+                    if (grasp == -1)
+                        grasp = i;
+                    continue;
                 }
-                if (player.grasps[i]?.grabbed is IPlayerEdible)
-                    return false; 
-                if (player.Grabability(player.grasps[i].grabbed) >= Player.ObjectGrabability.TwoHands) 
+                if (Player.Grabability(Player.grasps[i].grabbed) >= Player.ObjectGrabability.TwoHands)
                     return false;
-
-                if (player.grasps[i]?.grabbed is Spear)
-                    hasSpear = true;
-                else if (player.grasps[i]?.grabbed is Player)
-                    hasSlug = true;
             }
-
-            hasSpear = hasSpear || (!(player.spearOnBack is null) && player.spearOnBack.HasASpear);
-            hasSlug = hasSlug || (!(player.slugOnBack is null) && player.slugOnBack.HasASlug);
-
-            if (((player.CanPutSpearToBack || player.CanRetrieveSpearFromBack) && hasSpear) ||
-                ((player.CanPutSlugToBack || player.CanRetrieveSlugFromBack) && hasSlug))
-                return false;
-
             return HasAMask && grasp > -1;
+        }
+
+        private bool IsPressingMaskButton()
+        {
+            if (!FaceMasksHandler.hasImprovedInput)
+            {
+                if (!ShinyShieldMaskOptions.wearableMaskAlternateInput.Value)
+                    return Player.input[0].pckp;
+                else return Player.input[0].pckp && Player.input[0].y > 0;
+            }
+            else return CheckImprovedInput();
+        }
+        private bool CheckImprovedInput()
+        {
+            if (!ShinyShieldMaskOptions.wearableMaskAlternateInput.Value)
+                return Player.IsPressed(FaceMasksHandler.maskButton as PlayerKeybind);
+            else return Player.IsPressed(FaceMasksHandler.maskButton as PlayerKeybind) && Player.input[0].y > 0;
+        }
+
+        public void CheckForbiddenInteractions()
+        {
+            if (FaceMasksHandler.hasImprovedInput)
+                return;
+            if (Player.input[0].pckp && !(Player.grasps[0] is null) && Player.grasps[0].grabbed is Creature creature &&
+                (Player.CanEatMeat(creature) || Player.CanMaulCreature(creature)))
+                LockInteraction();
+            else if (!ShinyShieldMaskOptions.wearableMaskAlternateInput.Value && (CanPutMaskOnFace() || CanRetrieveMaskFromFace()))
+            {
+                if (Player.swallowAndRegurgitateCounter > 0)
+                {
+                    LockInteraction();
+                    return;
+                }
+                bool hasSpear = false, hasSlug = false;
+                for (int i = 0; i < 2; i++)
+                {
+                    if (Player.grasps[i]?.grabbed is IPlayerEdible)
+                    {
+                        LockInteraction();
+                        return;
+                    }
+                    if (Player.grasps[i]?.grabbed is Spear)
+                        hasSpear = true;
+                    else if (Player.grasps[i]?.grabbed is Player)
+                        hasSlug = true;
+                }
+
+                hasSpear = hasSpear || (!(Player.spearOnBack is null) && Player.spearOnBack.HasASpear);
+                hasSlug = hasSlug || (!(Player.slugOnBack is null) && Player.slugOnBack.HasASlug);
+                if (((Player.CanPutSpearToBack || Player.CanRetrieveSpearFromBack) && hasSpear) ||
+                        ((Player.CanPutSlugToBack || Player.CanRetrieveSlugFromBack) && hasSlug))
+                    LockInteraction();
+            }
         }
 
         public void Update(bool eu)
         {
             if (HasAMask)
             {
+                if (ShinyShieldMaskOptions.scavKingMaskImmunity.Value && Mask.maskGfx.ScavKing)
+                    Player.scavengerImmunity = 2400;
                 if (Mask.slatedForDeletetion)
                 {
                     abstractStick?.Deactivate();
@@ -94,7 +118,7 @@ namespace ShinyShieldMask
                     return;
                 }
                 Mask.Forbid();
-                foreach (Creature.Grasp grasp in player.grasps)
+                foreach (Creature.Grasp grasp in Player.grasps)
                 {
                     if(!(grasp is null) && grasp.grabbed is VultureMask mask)
                     {
@@ -104,14 +128,8 @@ namespace ShinyShieldMask
                 }
             }
 
-            increment = player.input[0].pckp && (!ShinyShieldMaskOptions.wearableMaskAlternateInput.Value || player.input[0].y > 0)
-                && !interactionLocked && (CanPutMaskOnFace() || CanRetrieveMaskFromFace());
-
-            if (player.input[0].pckp && !(player.grasps[0] is null) && player.grasps[0].grabbed is Creature creature &&
-                player.CanEatMeat(creature) && creature.Template.meatPoints > 0)
-                LockInteraction();
-            else if (player.swallowAndRegurgitateCounter > 90)
-                LockInteraction();
+            CheckForbiddenInteractions();
+            increment = IsPressingMaskButton() && (CanPutMaskOnFace() || CanRetrieveMaskFromFace());
             
             if (!interactionLocked && increment)
             {
@@ -123,15 +141,15 @@ namespace ShinyShieldMask
                 }
                 else if (Mask == null && counter > 20)
                 {
-                    for (int i = 0; i < player.grasps.Length; ++i)
+                    for (int i = 0; i < Player.grasps.Length; ++i)
                     {
-                        if (player.grasps[i] != null && player.grasps[i].grabbed is VultureMask mask)
+                        if (Player.grasps[i] != null && Player.grasps[i].grabbed is VultureMask mask)
                         {
-                            Vector2 knockback = Custom.DirVec(player.grasps[i].grabbed.firstChunk.pos, player.bodyChunks[0].pos) * 2f;
+                            Vector2 knockback = Custom.DirVec(Player.grasps[i].grabbed.firstChunk.pos, Player.bodyChunks[0].pos) * 2f;
                             if (mask.donned > 0.9)
                                 knockback.y *= 2;
-                            player.bodyChunks[0].vel += knockback;
-                            MaskToFace(player.grasps[i].grabbed as VultureMask);
+                            Player.bodyChunks[0].vel += knockback;
+                            MaskToFace(Player.grasps[i].grabbed as VultureMask);
                             counter = 0;
                             break;
                         }
@@ -139,7 +157,7 @@ namespace ShinyShieldMask
                 }
             }
             else counter = 0;
-            if (!player.input[0].pckp)
+            if (!Player.input[0].pckp)
                 interactionLocked = false;
             increment = false;
         }
@@ -147,33 +165,33 @@ namespace ShinyShieldMask
         public void MaskToHand(bool eu)
         {
             if (Mask == null) return;
-            Mask.firstChunk.pos = player.mainBodyChunk.pos;
-            for (int i = 0; i < player.grasps.Length; i++)
+            Mask.firstChunk.pos = Player.mainBodyChunk.pos;
+            for (int i = 0; i < Player.grasps.Length; i++)
             {
-                if (player.grasps[i] != null)
+                if (Player.grasps[i] != null)
                 {
-                    if ((int)player.Grabability(this.player.grasps[i].grabbed) >= 3) { return; }
+                    if ((int)Player.Grabability(this.Player.grasps[i].grabbed) >= 3) { return; }
                 }
             }
             int num = -1;
             int num2 = 0;
             while (num2 < 2 && num == -1)
             {
-                if (player.grasps[num2] == null) num = num2;
+                if (Player.grasps[num2] == null) num = num2;
                 ++num2;
             }
             if (num == -1) return;
-            if (player.graphicsModule != null)
-                Mask.firstChunk.MoveFromOutsideMyUpdate(eu, (player.graphicsModule as PlayerGraphics).hands[num].pos);
+            if (Player.graphicsModule != null)
+                Mask.firstChunk.MoveFromOutsideMyUpdate(eu, (Player.graphicsModule as PlayerGraphics).hands[num].pos);
             
-            player.SlugcatGrab(Mask, num);
+            Player.SlugcatGrab(Mask, num);
             Mask.donned = -1;
             Mask.lastDonned = -1;
 
             Mask = null;
             interactionLocked = true;
-            player.noPickUpOnRelease = 20;
-            player.room.PlaySound(SoundID.Vulture_Mask_Pick_Up, player.mainBodyChunk);
+            Player.noPickUpOnRelease = 20;
+            Player.room.PlaySound(SoundID.Vulture_Mask_Pick_Up, Player.mainBodyChunk);
             abstractStick?.Deactivate();
             abstractStick = null;
         }
@@ -181,35 +199,35 @@ namespace ShinyShieldMask
         public void MaskToFace(VultureMask mask)
         {
             if (Mask != null) return;
-            for (int i = 0; i < player.grasps.Length; ++i)
+            for (int i = 0; i < Player.grasps.Length; ++i)
             {
-                if (player.grasps[i] != null && player.grasps[i].grabbed == mask)
+                if (Player.grasps[i] != null && Player.grasps[i].grabbed == mask)
                 {
-                    player.ReleaseGrasp(i);
+                    Player.ReleaseGrasp(i);
                     break;
                 }
             }
             Mask = mask;
             mask.Forbid();
             interactionLocked = true;
-            player.noPickUpOnRelease = 20;
-            player.room.PlaySound(SoundID.Slugcat_Stash_Spear_On_Back, player.mainBodyChunk.pos, 1.5f, 1.3f);
+            Player.noPickUpOnRelease = 20;
+            Player.room.PlaySound(SoundID.Slugcat_Stash_Spear_On_Back, Player.mainBodyChunk.pos, 1.5f, 1.3f);
             abstractStick?.Deactivate();
-            abstractStick = new AbstractFaceMask(player.abstractPhysicalObject, Mask.abstractPhysicalObject, this);
+            abstractStick = new AbstractFaceMask(Player.abstractPhysicalObject, Mask.abstractPhysicalObject, this);
         }
 
         public void DropMask(bool fling = false)
         {
             if (Mask == null) return;
-            Mask.firstChunk.pos = player.mainBodyChunk.pos;
+            Mask.firstChunk.pos = Player.mainBodyChunk.pos;
             Mask.forbiddenToPlayer = 10;
             if (fling)
             {
                 Vector2 dir = Custom.RNV(); if (dir.y < 0f) dir.y = -dir.y;
-                Mask.firstChunk.vel = player.mainBodyChunk.vel + dir * (9f * UnityEngine.Random.value + 6f);
+                Mask.firstChunk.vel = Player.mainBodyChunk.vel + dir * (9f * UnityEngine.Random.value + 6f);
             }
             else
-                Mask.firstChunk.vel = player.mainBodyChunk.vel + Custom.RNV() * (3f * UnityEngine.Random.value);
+                Mask.firstChunk.vel = Player.mainBodyChunk.vel + Custom.RNV() * (3f * UnityEngine.Random.value);
             Mask = null;
             abstractStick?.Deactivate();
             abstractStick = null;

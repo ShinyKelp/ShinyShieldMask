@@ -16,11 +16,13 @@ namespace ShinyShieldMask
         public static readonly Configurable<float> eliteResistance = instance.config.Bind<float>("EliteResistance", 0f, new ConfigAcceptableRange<float>(0f, 1f));
         public static readonly Configurable<bool> enableShieldMask = instance.config.Bind<bool>("EnableShieldMask", true);
         public static readonly Configurable<bool> randomFearDuration = instance.config.Bind<bool>("RandomFearDuration", false);
+        public static readonly Configurable<bool> attacksFearDuration = instance.config.Bind<bool>("AttackFearDuration", false);
         public static readonly Configurable<int> vultureMaskFearDuration = instance.config.Bind<int>("VultureMaskFear", 18, new ConfigAcceptableRange<int>(0, 999));
         public static readonly Configurable<int> kingVultureMaskFearDuration = instance.config.Bind<int>("KingVultureMaskFear", 30, new ConfigAcceptableRange<int>(0, 999));
         public static readonly Configurable<int> eliteScavFearDuration = instance.config.Bind<int>("EliteScavFear", 0, new ConfigAcceptableRange<int>(0, 999));
         public static readonly Configurable<bool> wearableMask = instance.config.Bind<bool>("WearableMask", false);
         public static readonly Configurable<bool> wearableMaskAlternateInput = instance.config.Bind<bool>("WearableMaskAltInput", false);
+        public static readonly Configurable<bool> scavKingMaskImmunity = instance.config.Bind<bool>("ScavKingMaskImmunity", false);
         public static readonly Configurable<bool> demaskableElites = instance.config.Bind<bool>("DemaskableElites", false);
         public static readonly Configurable<float> masklessEliteChance = instance.config.Bind<float>("MasklessEliteChance", 0f, new ConfigAcceptableRange<float>(0f, 10f));
 
@@ -91,7 +93,7 @@ namespace ShinyShieldMask
                 {
                     description = "Chance for an elite scavenger to spawn without a mask. (10 = 100%)"
                 },
-                new OpRect(new Vector2(0f, 72f), new Vector2(257f, 150f)),
+                new OpRect(new Vector2(0f, 37f), new Vector2(257f, 185f)),
                 new OpUpdown(vultureMaskFearDuration, new Vector2(15f, 175f), 60f),
                 new OpLabel(80f, 180f, "Normal masks fear duration\n (seconds)")
                 {
@@ -104,22 +106,32 @@ namespace ShinyShieldMask
                 },
                 new OpCheckBox(randomFearDuration, new Vector2(15f, 85f))
                 {
-                    description = "Up to 50% more or less duration"
+                    description = "Up to 50% more or less duration."
                 },
                 new OpLabel(43f, 88f, "Randomize fear duration"),
+                new OpCheckBox(attacksFearDuration, new Vector2(15f, 55f))
+                {
+                    description = "Attacking a lizard will make the mask diguise run out faster."
+                },
+                new OpLabel(43f, 58f, "Attacks reduce duration"),
 
-                new OpRect(new Vector2(282f, 117f), new Vector2(250f, 105f)),
+                new OpRect(new Vector2(282f, 72f), new Vector2(250f, 150f)),
                 new OpCheckBox(wearableMask, new Vector2(360f, 154f))
                 {
-                    description = "Hold GRAB to place the mask on your face.",
+                    description = "Hold GRAB/BIND to place the mask on your face.",
                 },
                 new OpLabel(298f, 189f, "Wearable vulture mask", true),
                 new OpCheckBox(wearableMaskAlternateInput, new Vector2(300f, 124f))
                 {
-                    description = "Input to grab/release mask will be UP+GRAB instead."
+                    description = "Input to wear/release mask will be UP+GRAB/BIND instead."
                 },
                 new OpLabel(328f, 127f, "Alternate Input"),
-                
+                new OpCheckBox(scavKingMaskImmunity, new Vector2(300f, 94f))
+                {
+                    description = "A worn Scavenger King mask will pacify scavengers, same as holding it."
+                },
+                new OpLabel(328f, 97f, "ScavKing Mask immunity"),
+
             };
 
             opTab.AddItems(UIArrPlayerOptions);

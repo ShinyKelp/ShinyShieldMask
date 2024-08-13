@@ -10,42 +10,111 @@ using Mono.Cecil.Cil;
 using DropButton;
 using ImprovedInput;
 using MoreSlugcats;
+using System.Runtime.CompilerServices;
 
 [module: UnverifiableCode]
 [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
 
 namespace ShinyShieldMask
-{
+{   
     public class FaceMasksHandler
     {
-        private bool hasLancerMod = false, hasDropButton = false;
-        public static Dictionary<Player, FaceMask> PlayerFaceMasks;
-        public static Dictionary<FaceMask, Player> FaceMaskPlayers; //Double dictionaries to find either value easily
+        public static bool hasLancerMod = false, hasDropButton = false, hasImprovedInput = false;
+        public static ConditionalWeakTable<Player, FaceMask> PlayerFaceMasks;
+        //public static ConditionalWeakTable<FaceMask, Player> FaceMaskPlayers; //Double dictionaries to find either value easily
+        internal static object maskButton;
+
+        private bool MaskHasPlayer(FaceMask mask, out Player player)
+        {
+            player = null;
+
+            if(ShinyShieldMaskMod.rwGame.Target is RainWorldGame game && game.Players != null)
+            {
+                foreach(AbstractCreature playerAbs in game.Players)
+                {
+                    if(playerAbs != null && (playerAbs.realizedCreature is Player listedPlayer) && 
+                        PlayerFaceMasks.TryGetValue(listedPlayer, out FaceMask listedMask) && mask == listedMask)
+                    {
+                        player = listedPlayer;
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private bool MaskHasPlayer(VultureMask mask, out Player player)
+        {
+            player = null;
+            if (ShinyShieldMaskMod.rwGame.Target is RainWorldGame game && game.Players != null)
+            {
+                foreach (AbstractCreature playerAbs in game.Players)
+                {
+                    if (playerAbs != null && playerAbs.realizedCreature is Player listedPlayer &&
+                        PlayerFaceMasks.TryGetValue(listedPlayer, out FaceMask fMask) &&
+                        fMask != null && fMask.Mask == mask)
+                    {
+                        player = listedPlayer;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private bool MaskHasPlayer(FaceMask mask)
+        {
+
+            if (ShinyShieldMaskMod.rwGame.Target is RainWorldGame game && game.Players != null)
+            {
+                foreach (AbstractCreature playerAbs in game.Players)
+                {
+                    if (playerAbs != null && (playerAbs.realizedCreature is Player listedPlayer) &&
+                        PlayerFaceMasks.TryGetValue(listedPlayer, out FaceMask listedMask) && mask == listedMask)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private bool MaskHasPlayer(VultureMask mask)
+        {
+            if (ShinyShieldMaskMod.rwGame.Target is RainWorldGame game && game.Players != null)
+            {
+                foreach (AbstractCreature playerAbs in game.Players)
+                {
+                    if (playerAbs != null && playerAbs.realizedCreature is Player listedPlayer &&
+                        PlayerFaceMasks.TryGetValue(listedPlayer, out FaceMask fMask) &&
+                        fMask != null && fMask.Mask == mask)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
 
         public FaceMasksHandler()
         {
-            PlayerFaceMasks?.Clear();
-            FaceMaskPlayers?.Clear();
-            PlayerFaceMasks = new Dictionary<Player, FaceMask>();
-            FaceMaskPlayers = new Dictionary<FaceMask, Player>();
+            PlayerFaceMasks = new ConditionalWeakTable<Player, FaceMask>();
         }
 
-        public void SetVariables(bool hasLancer = false, bool hasDrop = false)
+        public void SetVariables(bool hasLancer = false, bool hasDrop = false, bool hasImprovedInputs = false)
         {
             hasLancerMod = hasLancer;
             hasDropButton = hasDrop;
+            hasImprovedInput = hasImprovedInputs;
+            if (hasImprovedInput)
+                CreateImprovedInput();
         }
 
-        public void Player_Destroy(On.Player.orig_Destroy orig, Player self)
+        private void CreateImprovedInput()
         {
-            Debug.Log("Called player destroy.");
-            if (PlayerFaceMasks.ContainsKey(self))
-            {
-                PlayerFaceMasks.TryGetValue(self, out FaceMask fMask);
-                PlayerFaceMasks.Remove(self);
-                FaceMaskPlayers.Remove(fMask);
-            }
-            orig(self);
+            maskButton = PlayerKeybind.Register("ShinyShieldMask:MaskButton", "Shiny Shield Mask", "MaskButton", KeyCode.C, KeyCode.JoystickButton3);
         }
 
         private void HandleLancerConstructor(Player player)
@@ -55,7 +124,6 @@ namespace ShinyShieldMask
             {
                 FaceMask fMask = new FaceMask(player);
                 PlayerFaceMasks.Add(player, fMask);
-                FaceMaskPlayers.Add(fMask, player);
             }
         }
         
@@ -83,11 +151,10 @@ namespace ShinyShieldMask
                 //Don't add faceMask to Lunter (already has one, albeit slightly different)
                 if (hasLancerMod)
                     HandleLancerConstructor(self);
-                else if (!PlayerFaceMasks.ContainsKey(self))
+                else if (!PlayerFaceMasks.TryGetValue(self, out _))
                 {
                     FaceMask fMask = new FaceMask(self);
                     PlayerFaceMasks.Add(self, fMask);
-                    FaceMaskPlayers.Add(fMask, self);
                 }
             }
         }
@@ -180,7 +247,6 @@ namespace ShinyShieldMask
                 && ((self.grasps[0] != null && self.Grabability(self.grasps[0].grabbed) >= Player.ObjectGrabability.TwoHands) ||
                 (self.grasps[1] != null && self.Grabability(self.grasps[1].grabbed) >= Player.ObjectGrabability.TwoHands) || (self.grasps[0] != null && self.grasps[1] != null)))
                 {
-                    Debug.Log("Mask straight to face");
                     fMask.MaskToFace(self.pickUpCandidate as VultureMask);
                     self.wantToPickUp = 0;
                 }
@@ -197,9 +263,10 @@ namespace ShinyShieldMask
         public void DropMaskOnStun(On.Player.orig_Stun orig, Player self, int st)
         {
             orig(self, st);
-            if(PlayerFaceMasks.TryGetValue(self, out FaceMask mask))
+            if(PlayerFaceMasks.TryGetValue(self, out FaceMask mask) && mask.HasAMask)
             {
-                if (mask.HasAMask && st > UnityEngine.Random.Range(40, 80) * (mask.Mask.AbstrMsk.scavKing? 2 : 1))
+                if (st > UnityEngine.Random.Range(40, 80) && (!ModManager.MMF || !MMF.cfgJetfishItemProtection.Value ||
+                    self.stunDamageType != Creature.DamageType.Blunt))
                     mask.DropMask();
             }
         }
@@ -240,8 +307,9 @@ namespace ShinyShieldMask
                 }
             }
 
+
             if (!(abstractMask is null) &&
-                FaceMaskPlayers.TryGetValue(abstractMask.faceMask, out Player player))
+                MaskHasPlayer(abstractMask.faceMask, out Player player))
             {
                 self.donned = 1f;
                 self.lastDonned = 1f;
@@ -293,7 +361,7 @@ namespace ShinyShieldMask
             }
 
             if (!(abstractMask is null) &&
-                FaceMaskPlayers.TryGetValue(abstractMask.faceMask, out Player player))
+                MaskHasPlayer(abstractMask.faceMask, out Player player))
             {
                 self.donned = 1f;
                 self.lastDonned = 1f;
@@ -311,11 +379,9 @@ namespace ShinyShieldMask
         {
             if(obj is VultureMask mask)
             {
-                foreach (var pair in PlayerFaceMasks)
-                {
-                    if (pair.Value.HasAMask && pair.Value.Mask == mask)
-                        return 0;
-                }
+                if (MaskHasPlayer(mask))
+                    return 0;
+
             }
             return orig(self, obj, pickupDropInsteadOfWeaponSelection);
         }
@@ -324,11 +390,8 @@ namespace ShinyShieldMask
         {
             if (obj is VultureMask mask)
             {
-                foreach (var pair in PlayerFaceMasks)
-                {
-                    if (pair.Value.HasAMask && pair.Value.Mask == mask)
-                        return 0;
-                }
+                if (MaskHasPlayer(mask))
+                    return 0;
             }
             return orig(self, obj, weaponFiltered);
         }
@@ -339,8 +402,22 @@ namespace ShinyShieldMask
             orig(self, source, directionAndMomentum, hitChunk, hitAppendage, type, damage, stunBonus);
             if (!(source is null) && source.owner is Creature creature && creature.abstractCreature.creatureTemplate.TopAncestor().type == CreatureTemplate.Type.Leech)
                 return;
-            if ((self is Player player) && PlayerFaceMasks.TryGetValue(player, out FaceMask mask) && mask.HasAMask && !mask.Mask.AbstrMsk.scavKing)
-                mask.DropMask();
+            if ((self is Player player) && PlayerFaceMasks.TryGetValue(player, out FaceMask mask) && mask.HasAMask)
+            {
+                if (source != null && source.owner is JetFish && ModManager.MMF && MMF.cfgJetfishItemProtection.Value)
+                    return;
+                VultureMask vMask = mask.Mask;
+                if (vMask.maskGfx.overrideSprite != "" && (vMask.maskGfx.overrideSprite == "KrakenMask" ||
+                        vMask.maskGfx.overrideSprite == "SpikeMask" || vMask.maskGfx.overrideSprite == "HornedMask" ||
+                        vMask.maskGfx.overrideSprite == "SadMask") && ShinyShieldMaskOptions.eliteScavMaskStun.Value > 0)
+                    mask.DropMask();
+                else if (vMask.King && ShinyShieldMaskOptions.vultureKingMaskStun.Value > 0)
+                    mask.DropMask();
+                else if(vMask.maskGfx.ScavKing && ShinyShieldMaskOptions.scavKingMaskStun.Value > 0)
+                    mask.DropMask();
+                else if(ShinyShieldMaskOptions.vultureMaskStun.Value > 0)
+                    mask.DropMask();
+            }
         }
 
         public CreatureTemplate.Relationship LizardSeeFaceMask(On.LizardAI.orig_IUseARelationshipTracker_UpdateDynamicRelationship orig, LizardAI self, RelationshipTracker.DynamicRelationship dRelation)
@@ -368,13 +445,6 @@ namespace ShinyShieldMask
                 return;
             if (PlayerFaceMasks.TryGetValue(self, out FaceMask mask))
                 mask.DropMask();
-        }
-
-        public void ClearMasks()
-        {
-            Debug.Log("Clearing all faceMasks");
-            PlayerFaceMasks.Clear();
-            FaceMaskPlayers.Clear();
         }
     }
 }

@@ -11,55 +11,65 @@ using System.Security;
 using System.Security.Permissions;
 using UnityEngine;
 using System.IO;
+using static CatSub.Story.StoryRegistry.TimelinePointer;
+
 [module: UnverifiableCode]
 [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
 
 namespace ShinyShieldMask
 {
-    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.2.5")]
+    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.4.0.1")]
     public class ShinyShieldMaskMod : BaseUnityPlugin
     {
 
-        private bool hasLancerMod, hasDropButton;
+        private bool hasLancerMod, hasDropButton, hasImprovedInput;
         private FaceMasksHandler faceMasksHandler;
         private void OnEnable()
         {
             On.RainWorld.OnModsInit += RainWorldOnOnModsInit;
-            if (EliteMasks is null)
-                EliteMasks = new Dictionary<EntityID, KeyValuePair<bool, VultureMask.AbstractVultureMask>>();
         }
 
         private bool IsInit;
 
         public static Dictionary<EntityID, KeyValuePair<bool, VultureMask.AbstractVultureMask>> EliteMasks;
 
+        internal static WeakReference rwGame = new WeakReference(null);
         private void RainWorldOnOnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
         {
             orig(self);
             try
             {
                 if (IsInit) return;
+                if (EliteMasks is null)
+                    EliteMasks = new Dictionary<EntityID, KeyValuePair<bool, VultureMask.AbstractVultureMask>>();
                 hasLancerMod = false; hasDropButton = false;
-                foreach(ModManager.Mod mod in ModManager.ActiveMods)
+                foreach (ModManager.Mod mod in ModManager.ActiveMods)
                 {
                     if (mod.id == "topicular.lancer")
                     {
                         hasLancerMod = true;
-                        Debug.Log("Lancer mod detected.");
                     }
-                    if(mod.id == "drop-button")
+                    if (mod.id == "drop-button")
                     {
                         hasDropButton = true;
-                        Debug.Log("Drop button detected.");
+                    }
+                    if (mod.id == "improved-input-config")
+                    {
+                        hasImprovedInput = true;
                     }
                 }
-                
+
+                if (faceMasksHandler is null)
+                    faceMasksHandler = new FaceMasksHandler();
+
                 //Shield functionality
                 On.Spear.HitSomething += Spear_HitSomething;
 
-                //Mask fear factor (both player and elites)
+                //Mask fear factor (both Player and elites)
                 IL.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship;
                 On.LizardAI.IUseARelationshipTracker_UpdateDynamicRelationship += LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship1;
+                On.StaticWorld.InitStaticWorld += StaticWorld_InitStaticWorld;
+                On.Lizard.Violence += GetUsedToVultureMask;
 
                 //Elite scavenger masks stuff here
                 On.Scavenger.ctor += CtorCheckMaskDictionary;
@@ -71,9 +81,6 @@ namespace ShinyShieldMask
 
                 On.RainWorldGame.ShutDownProcess += RainWorldGameOnShutDownProcess;
                 On.GameSession.ctor += GameSessionOnctor;
-                if (faceMasksHandler is null)
-                    faceMasksHandler = new FaceMasksHandler();
-                else faceMasksHandler.ClearMasks();
                 SetFaceMaskHooks();
                 MachineConnector.SetRegisteredOI("ShinyKelp.ShinyShieldMask", ShinyShieldMaskOptions.instance);
                 Debug.Log("Finished applying hooks for Shiny Shield Mask!");
@@ -83,6 +90,92 @@ namespace ShinyShieldMask
             {
                 Logger.LogError(ex);
                 throw;
+            }
+        }
+
+        private void GetUsedToVultureMask(On.Lizard.orig_Violence orig, Lizard self, BodyChunk source, Vector2? directionAndMomentum, BodyChunk hitChunk, PhysicalObject.Appendage.Pos onAppendagePos, Creature.DamageType type, float damage, float stunBonus)
+        {
+            orig(self, source, directionAndMomentum, hitChunk, onAppendagePos, type, damage, stunBonus);
+            if (!ShinyShieldMaskOptions.attacksFearDuration.Value)
+                return;
+            if(source != null && source.owner is Weapon weapon)
+            {
+                if (weapon.thrownBy is Scavenger scav && (scav.Elite || scav.King) && !scav.readyToReleaseMask)
+                {
+                    if (self.Template.visualRadius > 200)
+                    {
+                        CreatureTemplate.Relationship.Type vulRel;
+                        if (scav.King)
+                            vulRel = self.Template.relationships[CreatureTemplate.Type.KingVulture.Index].type;
+                        else
+                            vulRel = self.Template.relationships[CreatureTemplate.Type.Vulture.Index].type;
+
+                        if (vulRel != CreatureTemplate.Relationship.Type.Attacks && vulRel != CreatureTemplate.Relationship.Type.Eats)
+                        {
+                            if (self.AI.usedToVultureMask != 0 && self.AI.usedToVultureMask <= ShinyShieldMaskOptions.eliteScavFearDuration.Value * 40)
+                            {
+                                self.AI.usedToVultureMask += 80;
+                                if (self.AI.usedToVultureMask == 0)
+                                    self.AI.usedToVultureMask++;
+                            }
+                        }
+                    }
+                }
+                else if(weapon.thrownBy is Player player)
+                {
+                    VultureMask mask= null;
+                    for(int i = 0; i < player.grasps.Length; ++i)
+                    {
+                        if (player.grasps[i] != null && player.grasps[i].grabbed is VultureMask m)
+                        {
+                            mask = m;
+                            break;
+                        }
+                    }
+                    if(mask is null)
+                    {
+                        if (FaceMasksHandler.PlayerFaceMasks.TryGetValue(player, out FaceMask fMask) && fMask.HasAMask)
+                            mask = fMask.Mask;
+                    }
+                    if(mask != null)
+                    {
+                        CreatureTemplate.Relationship.Type vulRel;
+                        float duration = 0;
+                        if (mask.King)
+                        {
+                            vulRel = self.Template.relationships[CreatureTemplate.Type.KingVulture.Index].type;
+                            duration = ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value * 40;
+                        }
+                        else
+                        {
+                            vulRel = self.Template.relationships[CreatureTemplate.Type.Vulture.Index].type;
+                            duration = ShinyShieldMaskOptions.vultureMaskFearDuration.Value * 40;
+                        }
+
+                        if (vulRel != CreatureTemplate.Relationship.Type.Attacks && vulRel != CreatureTemplate.Relationship.Type.Eats)
+                        {
+                            if (self.AI.usedToVultureMask != 0 && self.AI.usedToVultureMask <= duration)
+                            {
+                                self.AI.usedToVultureMask += 80;
+                                if (self.AI.usedToVultureMask == 0)
+                                    self.AI.usedToVultureMask++;
+                            }
+                        }
+                    }
+                }
+            }
+                    
+                    
+        }
+
+        private void StaticWorld_InitStaticWorld(On.StaticWorld.orig_InitStaticWorld orig)
+        {
+            orig();
+            if(StaticWorld.creatureTemplates[CreatureTemplate.Type.GreenLizard.index].relationships[CreatureTemplate.Type.Vulture.index].type == CreatureTemplate.Relationship.Type.Afraid &&
+                StaticWorld.creatureTemplates[CreatureTemplate.Type.GreenLizard.index].relationships[CreatureTemplate.Type.Vulture.index].intensity == 0.9f)
+            {
+                StaticWorld.creatureTemplates[CreatureTemplate.Type.GreenLizard.index].relationships[CreatureTemplate.Type.Vulture.index].type = CreatureTemplate.Relationship.Type.Ignores;
+                StaticWorld.creatureTemplates[CreatureTemplate.Type.GreenLizard.index].relationships[CreatureTemplate.Type.Vulture.index].intensity = 0f;
             }
         }
 
@@ -114,8 +207,11 @@ namespace ShinyShieldMask
 
                     scavenger.room.abstractRoom.AddEntity(abstractVultureMask);
                     abstractVultureMask.RealizeInRoom();
-                    (abstractVultureMask.realizedObject as VultureMask).rotVel = new Vector2(20f, 0f);
-                    (abstractVultureMask.realizedObject as VultureMask).firstChunk.vel = (!velocity.HasValue? Vector2.zero : velocity.Value) * 20f;
+                    if(abstractVultureMask.realizedObject is VultureMask realizedMask)
+                    {
+                        realizedMask.rotVel = new Vector2(20f, 0f);
+                        realizedMask.firstChunk.vel = (!velocity.HasValue ? Vector2.zero : velocity.Value) * 20f;
+                    }
                     if (EliteMasks.ContainsKey(scavenger.abstractCreature.ID))
                     {
                         EliteMasks[scavenger.abstractCreature.ID] = new KeyValuePair<bool, VultureMask.AbstractVultureMask>(
@@ -219,7 +315,6 @@ namespace ShinyShieldMask
                 {
                     self.maskGfx = new VultureMaskGraphics(self.scavenger,
                         EliteMasks[self.scavenger.abstractCreature.ID].Value, self.MaskSprite);
-                    Debug.Log("Asigned mask to scavenger.");
                     self.maskGfx.GenerateColor(EliteMasks[self.scavenger.abstractCreature.ID].Value.colorSeed);
                 }
             }
@@ -231,7 +326,7 @@ namespace ShinyShieldMask
             On.Player.ObjectEaten += faceMasksHandler.ObjectEatenWithFaceMask;
             On.Player.Die += faceMasksHandler.DropFaceMaskOnDeath;
             On.Player.Stun += faceMasksHandler.DropMaskOnStun;
-            On.Player.Destroy += faceMasksHandler.Player_Destroy;
+            //On.Player.Destroy += faceMasksHandler.Player_Destroy;
             On.Creature.Violence += faceMasksHandler.DropFaceMaskOnViolence;
             On.ScavengerAI.WeaponScore += faceMasksHandler.ScavNoPickUpFaceMaskWeapon;
             On.ScavengerAI.CollectScore_PhysicalObject_bool += faceMasksHandler.ScavNoPickUpFaceMaskCollect;
@@ -245,38 +340,54 @@ namespace ShinyShieldMask
             On.VultureMask.Update += faceMasksHandler.VultureMask_Update_Patch;
             On.PlayerGraphics.PlayerObjectLooker.HowInterestingIsThisObject += faceMasksHandler.PlayerNoLookAtFaceMask;
 
-            faceMasksHandler.SetVariables(hasLancerMod, hasDropButton);
+            faceMasksHandler.SetVariables(hasLancerMod, hasDropButton, hasImprovedInput);
         }
 
         private void RainWorldGameOnShutDownProcess(On.RainWorldGame.orig_ShutDownProcess orig, RainWorldGame self)
         {
-            faceMasksHandler.ClearMasks();
             EliteMasks.Clear();
             orig(self);
         }
 
         private void GameSessionOnctor(On.GameSession.orig_ctor orig, GameSession self, RainWorldGame game)
         {
-            faceMasksHandler.ClearMasks();
+            rwGame = new WeakReference(game);
             orig(self, game);
         }
 
         private CreatureTemplate.Relationship LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship1(On.LizardAI.orig_IUseARelationshipTracker_UpdateDynamicRelationship orig, LizardAI self, RelationshipTracker.DynamicRelationship dRelation)
         {
+            //If user did not set elite fear, or something is wrong with the parameters
             if ((ShinyShieldMaskOptions.eliteScavFearDuration.Value == 0) ||
                 dRelation is null || dRelation.trackerRep is null || dRelation.trackerRep.representedCreature is null ||
-                dRelation.trackerRep.representedCreature.realizedCreature is null ||
-                !(dRelation.trackerRep.representedCreature.creatureTemplate.type == MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite ||
+                dRelation.trackerRep.representedCreature.realizedCreature is null)
+                return orig(self, dRelation);
+            //If target is not elite or king scav
+            if(!(dRelation.trackerRep.representedCreature.creatureTemplate.type == MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite ||
                 dRelation.trackerRep.representedCreature.creatureTemplate.type == MoreSlugcatsEnums.CreatureTemplateType.ScavengerKing))
                 return orig(self, dRelation);
+            bool isKing = dRelation.trackerRep.representedCreature.creatureTemplate.type == MoreSlugcatsEnums.CreatureTemplateType.ScavengerKing;
+            //If target is elite without a mask on
+            if (dRelation.trackerRep.representedCreature.realizedCreature is Scavenger scav && scav.Elite && scav.readyToReleaseMask)
+                return orig(self, dRelation);
+            //If user is blind
+            if (self.lizard.Template.visualRadius < 200)
+                return orig(self, dRelation);
+            CreatureTemplate.Relationship baseRep = self.lizard.Template.relationships[dRelation.trackerRep.representedCreature.creatureTemplate.type.index];
+            CreatureTemplate.Relationship vultureRep = self.lizard.Template.relationships[CreatureTemplate.Type.Vulture.Index];
+            CreatureTemplate.Relationship kingVultureRep = self.lizard.Template.relationships[CreatureTemplate.Type.KingVulture.Index];
 
-            int maxUsed = (dRelation.trackerRep.representedCreature.creatureTemplate.type == MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite)?
-                ShinyShieldMaskOptions.eliteScavFearDuration.Value * 40 : ShinyShieldMaskOptions.eliteScavFearDuration.Value * 80;
-
-            if (self.usedToVultureMask < maxUsed &&
-                self.creature.creatureTemplate.type != CreatureTemplate.Type.RedLizard &&
-                self.creature.creatureTemplate.type != CreatureTemplate.Type.BlackLizard &&
-                !dRelation.trackerRep.representedCreature.realizedCreature.dead)
+            //If user naturally attacks vultures
+            if(isKing)
+                if (kingVultureRep.type == CreatureTemplate.Relationship.Type.Attacks ||
+                kingVultureRep.type == CreatureTemplate.Relationship.Type.Eats)
+                    return orig(self, dRelation);
+            else
+                if (vultureRep.type == CreatureTemplate.Relationship.Type.Attacks ||
+                vultureRep.type == CreatureTemplate.Relationship.Type.Eats)
+                    return orig(self, dRelation);
+            int maxUsed = (!isKing) ? ShinyShieldMaskOptions.eliteScavFearDuration.Value * 40 : ShinyShieldMaskOptions.eliteScavFearDuration.Value * 80;
+            if (self.usedToVultureMask < maxUsed && !dRelation.trackerRep.representedCreature.realizedCreature.dead)
             {
                 if (self.usedToVultureMask == -1)
                     self.usedToVultureMask = 1;
@@ -290,45 +401,76 @@ namespace ShinyShieldMask
                 else
                     self.usedToVultureMask++;
 
-                bool itHasPrey = false;
+                bool itHasThreat = false, itHasPrey = false;
                 foreach (ThreatTracker.ThreatCreature threat in self.threatTracker.threatCreatures)
                 {
                     if (threat.creature == dRelation.trackerRep)
                     {
-                        itHasPrey = true;
+                        itHasThreat = true;
+                        break;
                     }
                 }
-                if(!itHasPrey)
-                    self.threatTracker.AddThreatCreature(dRelation.trackerRep);
-
-                dRelation.currentRelationship.type = CreatureTemplate.Relationship.Type.Afraid;
-                dRelation.currentRelationship.intensity = 0.8f;
-            }
-            else if (dRelation.currentRelationship.type == CreatureTemplate.Relationship.Type.Afraid &&
-                StaticWorld.creatureTemplates[self.creature.creatureTemplate.index].relationships
-                [MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite.Index].type != CreatureTemplate.Relationship.Type.Afraid)
-            {
-                dRelation.currentRelationship.type = StaticWorld.creatureTemplates[self.creature.creatureTemplate.index].relationships
-                    [MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite.Index].type;
-                dRelation.currentRelationship.intensity = StaticWorld.creatureTemplates[self.creature.creatureTemplate.index].relationships
-                    [MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite.Index].intensity;
-                
-                bool itHasPrey = false;
-                foreach (ThreatTracker.ThreatCreature threat in self.threatTracker.threatCreatures)
+                foreach (PreyTracker.TrackedPrey prey in self.preyTracker.prey)
                 {
-                    if (threat.creature == dRelation.trackerRep)
+                    if (prey.critRep == dRelation.trackerRep)
                     {
                         itHasPrey = true;
+                        break;
                     }
                 }
                 if (itHasPrey)
+                    self.preyTracker.ForgetPrey(dRelation.trackerRep.representedCreature);
+
+                if (!itHasThreat && vultureRep.type == CreatureTemplate.Relationship.Type.Afraid)
+                    self.threatTracker.AddThreatCreature(dRelation.trackerRep);
+                if (isKing)
+                {
+                    dRelation.currentRelationship.type = kingVultureRep.type;
+                    dRelation.currentRelationship.intensity = kingVultureRep.intensity * Mathf.InverseLerp(maxUsed, 0, self.usedToVultureMask * 0.7f);
+                }
+                else
+                {
+                    dRelation.currentRelationship.type = vultureRep.type;
+                    dRelation.currentRelationship.intensity = vultureRep.intensity * Mathf.InverseLerp(maxUsed, 0, self.usedToVultureMask * 0.7f);
+                }
+                return dRelation.currentRelationship;
+            }
+            else if (dRelation.currentRelationship.type != baseRep.type)
+            {
+                bool itHasThreat = false;
+                foreach (ThreatTracker.ThreatCreature threat in self.threatTracker.threatCreatures)
+                {
+                    if (threat.creature == dRelation.trackerRep)
+                    {
+                        itHasThreat = true;
+                    }
+                }
+                if (itHasThreat && baseRep.type != CreatureTemplate.Relationship.Type.Afraid)
                     self.threatTracker.RemoveThreatCreature(dRelation.trackerRep.representedCreature);
+
+                bool itHasPrey = false;
+                foreach (PreyTracker.TrackedPrey prey in self.preyTracker.prey)
+                {
+                    if (prey.critRep == dRelation.trackerRep)
+                    {
+                        itHasPrey = true;
+                        break;
+                    }
+                }
+                if (!itHasPrey && (baseRep.type == CreatureTemplate.Relationship.Type.Eats ||
+                    baseRep.type == CreatureTemplate.Relationship.Type.Attacks))
+                    self.preyTracker.AddPrey(dRelation.trackerRep);
+
+                dRelation.currentRelationship = baseRep;
+                return dRelation.currentRelationship;
             }
             else
                 return orig(self, dRelation);
-            return dRelation.currentRelationship;
         }
 
+        //Lizards afraid of vulture masks: Now depends on their relationship with vultures and their visual radius.
+        //If they eat/attack vultures or are blind, they ignore masks. Otherwise, if they are not afraid of vultures,
+        //they simply ignore the mask user like greens.
         private void LizardAI_IUseARelationshipTracker_UpdateDynamicRelationship(ILContext il)
         {
             
@@ -395,32 +537,9 @@ namespace ShinyShieldMask
             );
             c.Emit(OpCodes.Add_Ovf);
 
-            //Next two values are for the intensity of the fear throughout the duration,
-            //defining start and end of the inverselerp function.
-            c.GotoNext(MoveType.After,
-                x => x.MatchLdcI4(700)
-            );
 
-            c.Emit(OpCodes.Pop);
-
-            c.EmitDelegate<Func<int>>(() =>
-            {
-                return ShinyShieldMaskOptions.vultureMaskFearDuration.Value * 40;
-            });
-
-
-            c.GotoNext(MoveType.After,
-                x => x.MatchLdcI4(1200)
-            );
-
-            c.Emit(OpCodes.Pop);
-
-            c.EmitDelegate<Func<int>>(() => {
-                return ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value * 40;
-            }
-            );
-
-            //Value to calculate in the inverselerp function.
+            //Value to calculate in the inverselerp function. Obsolete.
+            /*
             c = new ILCursor(il);
             c.GotoNext(MoveType.After,
                 x => x.MatchConvR4(),
@@ -438,7 +557,71 @@ namespace ShinyShieldMask
                 else
                     return (ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value * 40) * 0.7f;
             }
-            );
+            );//*/
+            //Resetting: now un-hardcoding lizard's vulture mask behaviours.
+            c.Index = 0;
+            c.GotoNext(MoveType.After,
+                x => x.MatchLdsfld<CreatureTemplate.Type>("BlackLizard"));  //Blind lizards, instead of black lizards, ignore masks
+            c.Index++;
+            c.Emit(OpCodes.Pop);
+            c.Emit(OpCodes.Ldarg_0);
+            c.EmitDelegate<Func<LizardAI, bool>>(self =>
+            {
+                return self.lizard.Template.visualRadius > 200;
+            });
+
+            c.GotoNext(MoveType.After,
+                x => x.MatchLdsfld<CreatureTemplate.Type>("RedLizard"));    //Vulture-attacking lizards, instead of red lizards, ignore masks
+            c.Index++;
+            c.Emit(OpCodes.Pop);
+            c.Emit(OpCodes.Ldarg_0);
+            c.Emit(OpCodes.Ldarg_1);
+            c.EmitDelegate<Func<LizardAI, RelationshipTracker.DynamicRelationship, bool>>((self, dRelation) =>
+            {
+                if ((dRelation.state is LizardAI.LizardTrackState state) && state.vultureMask == 2)
+                    return self.lizard.Template.relationships[CreatureTemplate.Type.KingVulture.Index].type != CreatureTemplate.Relationship.Type.Attacks &&
+                            self.lizard.Template.relationships[CreatureTemplate.Type.KingVulture.Index].type != CreatureTemplate.Relationship.Type.Eats;
+                else
+                    return self.lizard.Template.relationships[CreatureTemplate.Type.Vulture.Index].type != CreatureTemplate.Relationship.Type.Attacks &&
+                        self.lizard.Template.relationships[CreatureTemplate.Type.Vulture.Index].type != CreatureTemplate.Relationship.Type.Eats;
+            });
+
+            c.GotoNext(MoveType.After,
+                x => x.MatchLdsfld<CreatureTemplate.Type>("GreenLizard"));  //Vulture-ignoring lizards is now deprecated
+            c.Index++;
+            c.Emit(OpCodes.Pop);
+            c.EmitDelegate<Func<bool>>(() => { return false; });
+
+
+            c.Index = 0;
+            c.GotoNext(MoveType.After,
+                x => x.MatchLdcR4(0.4f),
+                x => x.MatchMul()
+                );
+            c.Emit(OpCodes.Pop);
+            c.Emit(OpCodes.Pop);
+            c.Emit(OpCodes.Ldarg_0);
+            c.Emit(OpCodes.Ldarg_1);
+            c.EmitDelegate<Func<LizardAI, RelationshipTracker.DynamicRelationship, CreatureTemplate.Relationship.Type>>((self, dRelation) =>
+            {
+                int vultureIndex = ((dRelation.state is LizardAI.LizardTrackState state) && state.vultureMask == 2) ? CreatureTemplate.Type.KingVulture.index : CreatureTemplate.Type.Vulture.index;
+
+                return self.lizard.Template.relationships[vultureIndex].type;
+            });
+            c.Emit(OpCodes.Ldarg_0);
+            c.Emit(OpCodes.Ldarg_1);
+            c.EmitDelegate<Func<LizardAI, RelationshipTracker.DynamicRelationship, float>>((self, dRelation) =>
+            {
+                int vultureIndex = ((dRelation.state is LizardAI.LizardTrackState state) && state.vultureMask == 2) ? CreatureTemplate.Type.KingVulture.index : CreatureTemplate.Type.Vulture.index;
+
+                float intensity = self.lizard.Template.relationships[vultureIndex].intensity;
+                if ((dRelation.state as LizardAI.LizardTrackState).vultureMask == 1)
+                    intensity *= Mathf.InverseLerp(ShinyShieldMaskOptions.vultureMaskFearDuration.Value * 40, 0, self.usedToVultureMask * 0.7f);
+                else
+                    intensity *= Mathf.InverseLerp(ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value * 40, 0, self.usedToVultureMask * 0.7f);
+
+                return intensity;
+            });
         }
 
         private bool Spear_HitSomething(On.Spear.orig_HitSomething orig, Spear self, SharedPhysics.CollisionResult result, bool eu)
@@ -556,8 +739,12 @@ namespace ShinyShieldMask
 
                             self.room.abstractRoom.AddEntity(abstractVultureMask);
                             abstractVultureMask.RealizeInRoom();
-                            (abstractVultureMask.realizedObject as VultureMask).rotVel = new Vector2(20f, 0f);
-                            (abstractVultureMask.realizedObject as VultureMask).firstChunk.vel = self.firstChunk.vel.normalized * 20f;
+                            if(abstractVultureMask.realizedObject is VultureMask realizedMask)
+                            {
+                                realizedMask.rotVel = new Vector2(20f, 0f);
+                                realizedMask.firstChunk.vel = self.firstChunk.vel.normalized * 20f;
+
+                            }
                             if (EliteMasks.ContainsKey(scavenger.abstractCreature.ID))
                             {
                                 EliteMasks[scavenger.abstractCreature.ID] = new KeyValuePair<bool, VultureMask.AbstractVultureMask>(
