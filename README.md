@@ -5,6 +5,6 @@ Rain World mod based on Garrakx's Shield Mask. Makes vulture masks act as shield
 
 -Fear duration of the mask on lizards
 
--Elite scavengers being protected by their masks as well
+-Elite scavengers being protected by their masks as well (optionally de-maskable)
 
 -Wearable mask that doesn't take a hand slot
