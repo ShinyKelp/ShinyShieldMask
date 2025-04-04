@@ -18,7 +18,7 @@ using static CatSub.Story.StoryRegistry.TimelinePointer;
 
 namespace ShinyShieldMask
 {
-    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.4.0.1")]
+    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.4.0.2")]
     public class ShinyShieldMaskMod : BaseUnityPlugin
     {
 
@@ -223,9 +223,9 @@ namespace ShinyShieldMask
             c.Emit(OpCodes.Ret);
         }
 
-        private void CheckIfNeedsEquipMask(On.Scavenger.orig_PickUpAndPlaceInInventory orig, Scavenger self, PhysicalObject obj)
+        private void CheckIfNeedsEquipMask(On.Scavenger.orig_PickUpAndPlaceInInventory orig, Scavenger self, PhysicalObject obj, bool lethalityBypass = false)
         {
-            orig(self, obj);
+            orig(self, obj, lethalityBypass);
             if(obj is VultureMask && (self.Elite || self.King) && self.readyToReleaseMask)
             {
                 (self.abstractCreature.abstractAI as ScavengerAbstractAI).bringPearlHome = true;
@@ -235,7 +235,7 @@ namespace ShinyShieldMask
         private void CheckReplenishMask(On.ScavengerAbstractAI.orig_ReGearInDen orig, ScavengerAbstractAI self)
         {
             orig(self);
-            if (self.parent.creatureTemplate.type == MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite)
+            if (self.parent.creatureTemplate.type == DLCSharedEnums.CreatureTemplateType.ScavengerElite)
             {
                 if (EliteMasks.ContainsKey(self.parent.ID) && !EliteMasks[self.parent.ID].Key)
                 {
@@ -261,7 +261,7 @@ namespace ShinyShieldMask
         {
             orig(self);
 
-            if (self is AbstractCreature creature && creature.creatureTemplate.type == MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite)
+            if (self is AbstractCreature creature && creature.creatureTemplate.type == DLCSharedEnums.CreatureTemplateType.ScavengerElite)
             {
                 EliteMasks.Remove(creature.ID);
             }
@@ -363,7 +363,7 @@ namespace ShinyShieldMask
                 dRelation.trackerRep.representedCreature.realizedCreature is null)
                 return orig(self, dRelation);
             //If target is not elite or king scav
-            if(!(dRelation.trackerRep.representedCreature.creatureTemplate.type == MoreSlugcatsEnums.CreatureTemplateType.ScavengerElite ||
+            if(!(dRelation.trackerRep.representedCreature.creatureTemplate.type == DLCSharedEnums.CreatureTemplateType.ScavengerElite ||
                 dRelation.trackerRep.representedCreature.creatureTemplate.type == MoreSlugcatsEnums.CreatureTemplateType.ScavengerKing))
                 return orig(self, dRelation);
             bool isKing = dRelation.trackerRep.representedCreature.creatureTemplate.type == MoreSlugcatsEnums.CreatureTemplateType.ScavengerKing;
@@ -538,26 +538,6 @@ namespace ShinyShieldMask
             c.Emit(OpCodes.Add_Ovf);
 
 
-            //Value to calculate in the inverselerp function. Obsolete.
-            /*
-            c = new ILCursor(il);
-            c.GotoNext(MoveType.After,
-                x => x.MatchConvR4(),
-                x => x.MatchLdcR4(600f)
-                );
-            c.Emit(OpCodes.Pop);
-
-            c.Emit(OpCodes.Ldarg_1);
-            c.EmitDelegate<Func<RelationshipTracker.DynamicRelationship, float>>((dRelation) =>
-            {
-                if ((dRelation.state as LizardAI.LizardTrackState).vultureMask == 1)
-                {
-                    return (ShinyShieldMaskOptions.vultureMaskFearDuration.Value * 40) * 0.7f;
-                }
-                else
-                    return (ShinyShieldMaskOptions.kingVultureMaskFearDuration.Value * 40) * 0.7f;
-            }
-            );//*/
             //Resetting: now un-hardcoding lizard's vulture mask behaviours.
             c.Index = 0;
             c.GotoNext(MoveType.After,
@@ -569,7 +549,6 @@ namespace ShinyShieldMask
             {
                 return self.lizard.Template.visualRadius > 200;
             });
-
             c.GotoNext(MoveType.After,
                 x => x.MatchLdsfld<CreatureTemplate.Type>("RedLizard"));    //Vulture-attacking lizards, instead of red lizards, ignore masks
             c.Index++;

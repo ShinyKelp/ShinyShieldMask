@@ -375,7 +375,7 @@ namespace ShinyShieldMask
 
         }
 
-        public int ScavNoPickUpFaceMaskWeapon(On.ScavengerAI.orig_WeaponScore orig, ScavengerAI self, PhysicalObject obj, bool pickupDropInsteadOfWeaponSelection)
+        public int ScavNoPickUpFaceMaskWeapon(On.ScavengerAI.orig_WeaponScore orig, ScavengerAI self, PhysicalObject obj, bool pickupDropInsteadOfWeaponSelection, bool reallyWantsSpear = false)
         {
             if(obj is VultureMask mask)
             {
@@ -383,7 +383,7 @@ namespace ShinyShieldMask
                     return 0;
 
             }
-            return orig(self, obj, pickupDropInsteadOfWeaponSelection);
+            return orig(self, obj, pickupDropInsteadOfWeaponSelection, reallyWantsSpear);
         }
 
         public int ScavNoPickUpFaceMaskCollect(On.ScavengerAI.orig_CollectScore_PhysicalObject_bool orig, ScavengerAI self, PhysicalObject obj, bool weaponFiltered)
