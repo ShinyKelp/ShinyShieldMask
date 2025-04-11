@@ -13,4 +13,5 @@ Rain World mod based on Garrakx's Shield Mask. Makes vulture masks act as shield
 # HOW TO INSTALL FROM GITHUB
 
 -Download zip file from Releases section
+
 -Unzip in your Rain World folder: Rain World\RainWorld_Data\StreamingAssets\mods\ShinyShieldMask
