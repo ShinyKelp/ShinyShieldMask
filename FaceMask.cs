@@ -111,6 +111,8 @@ namespace ShinyShieldMask
             {
                 if (ShinyShieldMaskOptions.scavKingMaskImmunity.Value && Mask.maskGfx.ScavKing)
                     Player.scavengerImmunity = 2400;
+                else if (ShinyShieldMaskOptions.templarMaskImmunity.Value && Mask.maskGfx.maskType == VultureMask.MaskType.SCAVTEMPLAR)
+                    Player.scavengerImmunity = 160;
                 if (Mask.slatedForDeletetion)
                 {
                     abstractStick?.Deactivate();

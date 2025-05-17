@@ -23,6 +23,7 @@ namespace ShinyShieldMask
         public static readonly Configurable<bool> wearableMask = instance.config.Bind<bool>("WearableMask", false);
         public static readonly Configurable<bool> wearableMaskAlternateInput = instance.config.Bind<bool>("WearableMaskAltInput", false);
         public static readonly Configurable<bool> scavKingMaskImmunity = instance.config.Bind<bool>("ScavKingMaskImmunity", false);
+        public static readonly Configurable<bool> templarMaskImmunity = instance.config.Bind<bool>("TemplarMaskImmunity", false);
         public static readonly Configurable<bool> demaskableElites = instance.config.Bind<bool>("DemaskableElites", false);
         public static readonly Configurable<float> masklessEliteChance = instance.config.Bind<float>("MasklessEliteChance", 0f, new ConfigAcceptableRange<float>(0f, 10f));
 
@@ -59,7 +60,7 @@ namespace ShinyShieldMask
                 {
                     description = "If the stun value is 0, the mask won't be dropped on hit. \nIf it's 1.6 or greater, all items will be dropped."
                 },
-                new OpLabel(15f, 350f, "Elite Scav Mask"),
+                new OpLabel(15f, 350f, "Elite / Templar Scav Mask"),
                 new OpFloatSlider(eliteScavMaskStun,new Vector2(20f,320f), 200)
                 {
                     description = "If the stun value is 0, the mask won't be dropped on hit. \nIf it's 1.6 or greater, all items will be dropped."
@@ -71,33 +72,33 @@ namespace ShinyShieldMask
                 },
 
                 new OpRect(new Vector2(282f, 248f), new Vector2(260f, 305f)),
-                new OpLabel(295f, 505f, "Elite Scavenger mask protection."),
+                new OpLabel(295f, 505f, "Scavenger mask head protection."),
                 new OpFloatSlider(eliteResistance, new Vector2(310f, 470f), 60)
                 {
-                    description = "Higher value, likelier to deflect a headshot. \nWorks similar to vultures."
+                    description = "Masks will protect scavengers' heads from spears, similar to vultures.\nHigher value = higher chance of block."
                 },
 
-                new OpLabel(295f, 435f, "Lizard afraid of elite scavenger duration"),
+                new OpLabel(295f, 435f, "Lizard afraid of masked scavenger duration"),
                 new OpUpdown(eliteScavFearDuration, new Vector2(310f, 395f), 60)
                 {
-                    description = "Lizards will be afraid of elite scavengers for this duration (zero = vanilla behaviour).\nCAUTION: This timer is SHARED with slugcat's mask timer!"
+                    description = "Lizards will be afraid of scavengers with masks for this duration (zero = vanilla behaviour).\nCAUTION: This timer is SHARED with slugcat's mask timer!"
                 },
-               new OpLabel(328f, 338f, "Demaskable elites", false),
+                new OpLabel(328f, 338f, "Demaskable elites", false),
                 new OpCheckBox(demaskableElites, new Vector2(300f, 335f))
                 {
-                    description = "When an elite scav mask blocks a spear, it will fall off of the scav."
+                    description = "When an elite/templar scav mask blocks a spear, it will fall off of the scav."
                 },
 
-                new OpLabel(295f, 290f, "Maskless Elite chance"),
+                new OpLabel(295f, 290f, "Maskless Scav chance"),
                 new OpFloatSlider(masklessEliteChance,new Vector2(300,260f), 200)
                 {
-                    description = "Chance for an elite scavenger to spawn without a mask. (10 = 100%)"
+                    description = "Chance for an elite/templar scavenger to spawn without a mask. (10 = 100%)"
                 },
                 new OpRect(new Vector2(0f, 37f), new Vector2(257f, 185f)),
                 new OpUpdown(vultureMaskFearDuration, new Vector2(15f, 175f), 60f),
                 new OpLabel(80f, 180f, "Normal masks fear duration\n (seconds)")
                 {
-                    description = "Includes normal and elite masks. Vanilla duration: 17.5s"
+                    description = "Includes normal, elite and templar masks. Vanilla duration: 17.5s"
                 },
                 new OpUpdown(kingVultureMaskFearDuration, new Vector2(15f, 130f), 60f),
                 new OpLabel(80f, 135f, "King masks fear duration\n (seconds)")
@@ -115,7 +116,7 @@ namespace ShinyShieldMask
                 },
                 new OpLabel(43f, 58f, "Attacks reduce duration"),
 
-                new OpRect(new Vector2(282f, 72f), new Vector2(250f, 150f)),
+                new OpRect(new Vector2(282f, 37f), new Vector2(250f, 185f)),
                 new OpCheckBox(wearableMask, new Vector2(360f, 154f))
                 {
                     description = "Hold GRAB/BIND to place the mask on your face.",
@@ -128,9 +129,15 @@ namespace ShinyShieldMask
                 new OpLabel(328f, 127f, "Alternate Input"),
                 new OpCheckBox(scavKingMaskImmunity, new Vector2(300f, 94f))
                 {
-                    description = "A worn Scavenger King mask will pacify scavengers, same as holding it."
+                    description = "A face-worn Scavenger King mask will pacify scavengers, same as if holding it."
                 },
                 new OpLabel(328f, 97f, "ScavKing Mask immunity"),
+
+                new OpCheckBox(templarMaskImmunity, new Vector2(300f, 64f))
+                {
+                    description = "Templar masks will pacify scavengers like scav king ones (only if worn) (weaker effect)."
+                },
+                new OpLabel(328f, 67f, "Templar Mask immunity"),
 
             };
 
