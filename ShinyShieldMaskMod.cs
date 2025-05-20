@@ -12,6 +12,7 @@ using System.Security.Permissions;
 using UnityEngine;
 using System.IO;
 using static CatSub.Story.StoryRegistry.TimelinePointer;
+using System.ComponentModel;
 
 [module: UnverifiableCode]
 [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
@@ -85,6 +86,7 @@ namespace ShinyShieldMask
                 On.Scavenger.PickUpAndPlaceInInventory += CheckIfNeedsEquipMask;
                 IL.Scavenger.Violence += DropCustomMaskOnDeath;
                 On.MoreSlugcats.VultureMaskGraphics.ctor_PhysicalObject_AbstractVultureMask_int += CheckIfMaskIsTemplar;
+                On.MoreSlugcats.VultureMaskGraphics.DrawSprites += KeepGlowInTemplarMask;
                 On.ScavengerAI.LikeOfPlayer += ScavengerAI_LikeOfPlayer;
 
                 On.RainWorldGame.ShutDownProcess += RainWorldGameOnShutDownProcess;
@@ -101,6 +103,25 @@ namespace ShinyShieldMask
             }
         }
 
+        private void KeepGlowInTemplarMask(On.MoreSlugcats.VultureMaskGraphics.orig_DrawSprites orig, VultureMaskGraphics self, RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
+        {
+            orig(self, sLeaser, rCam, timeStacker, camPos);
+            if (self.attachedTo is VultureMask mask && mask.AbstrMsk.colorSeed == TEMPLAR_MASK_ID)
+            {
+                sLeaser.sprites[self.firstSprite].color = Color.Lerp(sLeaser.sprites[self.firstSprite].color, RainWorld.GoldRGB, 0.5f);
+            }
+        }
+
+        private void CheckIfMaskIsTemplar(On.MoreSlugcats.VultureMaskGraphics.orig_ctor_PhysicalObject_AbstractVultureMask_int orig, VultureMaskGraphics self, PhysicalObject attached, VultureMask.AbstractVultureMask abstractMask, int firstSprite)
+        {
+            orig(self, attached, abstractMask, firstSprite);
+            if (abstractMask != null && abstractMask.colorSeed == TEMPLAR_MASK_ID)
+            {
+                self.maskType = VultureMask.MaskType.SCAVTEMPLAR;
+                self.glimmer = true;
+                self.ignoreDarkness = true;
+            }
+        }
         private float ScavengerAI_LikeOfPlayer(On.ScavengerAI.orig_LikeOfPlayer orig, ScavengerAI self, RelationshipTracker.DynamicRelationship dRelation)
         {
             if (dRelation != null && dRelation.trackerRep != null && dRelation.trackerRep.representedCreature != null && dRelation.trackerRep.representedCreature.realizedCreature != null && dRelation.trackerRep.representedCreature.realizedCreature is Player player)
@@ -119,16 +140,6 @@ namespace ShinyShieldMask
             else return orig(self, dRelation);
         }
 
-        private void CheckIfMaskIsTemplar(On.MoreSlugcats.VultureMaskGraphics.orig_ctor_PhysicalObject_AbstractVultureMask_int orig, VultureMaskGraphics self, PhysicalObject attached, VultureMask.AbstractVultureMask abstractMask, int firstSprite)
-        {
-            orig(self, attached, abstractMask, firstSprite);
-            if (abstractMask != null && abstractMask.colorSeed == TEMPLAR_MASK_ID)
-            {
-                self.maskType = VultureMask.MaskType.SCAVTEMPLAR;
-                self.glimmer = true;
-                self.ignoreDarkness = true;
-            }
-        }
 
         private void GetUsedToVultureMask(On.Lizard.orig_Violence orig, Lizard self, BodyChunk source, Vector2? directionAndMomentum, BodyChunk hitChunk, PhysicalObject.Appendage.Pos onAppendagePos, Creature.DamageType type, float damage, float stunBonus)
         {
