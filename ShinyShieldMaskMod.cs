@@ -19,11 +19,12 @@ using System.ComponentModel;
 
 namespace ShinyShieldMask
 {
-    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.5")]
+    [BepInPlugin("ShinyKelp.ShinyShieldMask", "Shiny Shield Mask", "1.5.1")]
     public class ShinyShieldMaskMod : BaseUnityPlugin
     {
 
-        private bool hasLancerMod, hasDropButton, hasImprovedInput;
+        private bool hasLancerMod, hasDropButton, hasImprovedInput, hasSentinel, hasWhoEatsWhom;
+        CreatureTemplate.Type sentinelType = null;
         private FaceMasksHandler faceMasksHandler;
         private const int TEMPLAR_MASK_ID = -54;
         private const int TEMPLAR_IMMUNITY_VALUE = 160;
@@ -63,6 +64,14 @@ namespace ShinyShieldMask
                     if (mod.id == "improved-input-config")
                     {
                         hasImprovedInput = true;
+                    }
+                    if(mod.id == "lb-fgf-m4r-ik.modpack")
+                    {
+                        hasSentinel = true;
+                    }
+                    if(mod.id == "ShinyKelp.WhoEatsWhom")
+                    {
+                        hasWhoEatsWhom = true;
                     }
                 }
 
@@ -219,11 +228,18 @@ namespace ShinyShieldMask
         private void StaticWorld_InitStaticWorld(On.StaticWorld.orig_InitStaticWorld orig)
         {
             orig();
-            if(StaticWorld.creatureTemplates[CreatureTemplate.Type.GreenLizard.index].relationships[CreatureTemplate.Type.Vulture.index].type == CreatureTemplate.Relationship.Type.Afraid &&
-                StaticWorld.creatureTemplates[CreatureTemplate.Type.GreenLizard.index].relationships[CreatureTemplate.Type.Vulture.index].intensity == 0.9f)
+            if (!hasWhoEatsWhom)
             {
-                StaticWorld.creatureTemplates[CreatureTemplate.Type.GreenLizard.index].relationships[CreatureTemplate.Type.Vulture.index].type = CreatureTemplate.Relationship.Type.Ignores;
-                StaticWorld.creatureTemplates[CreatureTemplate.Type.GreenLizard.index].relationships[CreatureTemplate.Type.Vulture.index].intensity = 0f;
+                if (StaticWorld.creatureTemplates[CreatureTemplate.Type.GreenLizard.index].relationships[CreatureTemplate.Type.Vulture.index].type == CreatureTemplate.Relationship.Type.Afraid &&
+                    StaticWorld.creatureTemplates[CreatureTemplate.Type.GreenLizard.index].relationships[CreatureTemplate.Type.Vulture.index].intensity == 0.9f)
+                {
+                    StaticWorld.creatureTemplates[CreatureTemplate.Type.GreenLizard.index].relationships[CreatureTemplate.Type.Vulture.index].type = CreatureTemplate.Relationship.Type.Ignores;
+                    StaticWorld.creatureTemplates[CreatureTemplate.Type.GreenLizard.index].relationships[CreatureTemplate.Type.Vulture.index].intensity = 0f;
+                }
+            }
+            if (hasSentinel)
+            {
+                sentinelType = new CreatureTemplate.Type("ScavengerSentinel");
             }
         }
 
@@ -746,7 +762,7 @@ namespace ShinyShieldMask
                 else
                     return orig(self, result, eu);
             }
-            else if(result.obj is Scavenger scavenger && !(scavenger is null) && (scavenger.Elite || scavenger.King || scavenger.Templar || scavenger.Disciple))
+            else if(result.obj is Scavenger scavenger && !(scavenger is null) && (scavenger.Elite || scavenger.King || scavenger.Templar || scavenger.Disciple || IsSentinel(scavenger)))
             {
                 if (result.chunk == scavenger.bodyChunks[2] && !scavenger.State.dead && !scavenger.readyToReleaseMask && !scavenger.KarmicArmorProtected)
                 {
@@ -761,7 +777,7 @@ namespace ShinyShieldMask
                             scavenger.Violence(self.firstChunk, self.firstChunk.vel, scavenger.bodyChunks[2], result.onAppendagePos, Creature.DamageType.Blunt, 0.04f, 5f);
 
                         //de-mask scavenger
-                        if (ShinyShieldMaskOptions.demaskableElites.Value && !scavenger.King && !scavenger.Disciple)
+                        if (ShinyShieldMaskOptions.demaskableElites.Value && !scavenger.King && !scavenger.Disciple && !IsSentinel(scavenger))
                         {
                             scavenger.readyToReleaseMask = true;
                             VultureMaskGraphics maskfx = (scavenger.graphicsModule as ScavengerGraphics).maskGfx;
@@ -803,7 +819,6 @@ namespace ShinyShieldMask
                                     abstractVultureMask);
                             }
                         }
-
 
                         HitEffect(self, scavenger, self.firstChunk.vel, result.collisionPoint, self.room);
                         SetSpearBouncing(self);
@@ -912,5 +927,15 @@ namespace ShinyShieldMask
             maskOnHorn.GetType().GetMethod("DropMask", flags).Invoke(maskOnHorn, new System.Object[] { false });
         }
         
+        private bool IsSentinel(CreatureTemplate.Type type)
+        {
+            return (hasSentinel && type == sentinelType);
+        }
+
+        private bool IsSentinel(Scavenger scav)
+        {
+            return scav != null && IsSentinel(scav.abstractCreature.creatureTemplate.type);
+        }
+
     }
 }
